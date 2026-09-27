@@ -1,0 +1,41 @@
+# Android 打包配方。相对路径相对本文件。
+# assets 指向仓库的 assets/；改任务 / agent 不用再设环境变量。
+
+assets: ../assets
+
+include:
+  - interface.json
+  - tasks/**
+  - resource/**
+  - resource_adb/**
+  - data/**
+  - locales/**
+  - MaaCommonAssets/**
+
+exclude:
+  - resource_playcover/**
+  - resource_wlroots/**
+
+# 出 agent（仓库根）：
+#   python tools/build_android_agents.py
+# 产物落到 Android/agent-dist/<abi>/jniLibs/lib*.so，由 MaaFwApp syncAgentJniLibs 进 APK。
+# 框架 .so 仍走 MaaFwApp 自己的 setup_maa_framework.py，不要往这里拷。
+agent:
+  sourceDir: agent-dist
+  abi: [arm64-v8a]
+  runtimes:
+    - location: nativeLibs
+      executable: libgo-service.so
+      env:
+        LD_LIBRARY_PATH: "{nativeLibs}"
+        MAAFW_BINARY_PATH: "{nativeLibs}"
+    - location: nativeLibs
+      executable: libcpp-algo.so
+      env:
+        LD_LIBRARY_PATH: "{nativeLibs}"
+        MAAFW_BINARY_PATH: "{nativeLibs}"
+
+app:
+  id: maaend
+  label: MaaEnd
+  icon: ../assets/locales/MaaEnd-Tiny.png
