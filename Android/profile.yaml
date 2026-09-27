@@ -22,7 +22,6 @@ exclude:
 # 框架 .so 仍走 MaaFwApp 自己的 setup_maa_framework.py，不要往这里拷。
 agent:
   sourceDir: agent-dist
-  abi: [arm64-v8a]
   runtimes:
     - location: nativeLibs
       executable: libgo-service.so
