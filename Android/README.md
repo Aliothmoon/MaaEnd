@@ -12,6 +12,15 @@ python tools/build_android_agents.py
 python Android/MaaFwApp/scripts/setup_maa_framework.py --abi arm64-v8a --tag v5.14.0
 ```
 
+需要 x86_64（模拟器）或 universal 包时，两边都带上对应 ABI：
+
+```bash
+python tools/build_android_agents.py --abi arm64-v8a --abi x86_64
+python Android/MaaFwApp/scripts/setup_maa_framework.py --abi all --tag v5.14.0
+```
+
+并把 `local.properties` 的 `build.debugAbi` / `build.releaseAbi` 设成 `arm64-v8a,x86_64`。链接期 SDK 按 ABI 放在 `deps-android/<abi>`。
+
 在 `Android/MaaFwApp/local.properties` 里写（不进 git）：
 
 ```properties
@@ -41,3 +50,14 @@ git -C Android/MaaFwApp fetch
 git -C Android/MaaFwApp checkout origin/main
 git add Android/MaaFwApp
 ```
+
+## CI
+
+`.github/workflows/android.yml`：agent 按 ABI（arm64-v8a / x86_64）分别交叉编译，再由 MaaFwApp 出包。MaaFramework 版本与 `install.yml` 一致取最新 release，手动运行可用 `maafw_version` 覆盖。
+
+| 触发 | 产物 |
+| --- | --- |
+| push / PR（`Android/`、`agent/`、构建脚本变更） | `MaaEnd-<tag>-universal-debug.apk` |
+| `v*` tag，或手动运行选 `assemble=release` | `MaaEnd-<tag>-universal.apk`、`MaaEnd-<tag>-arm64-v8a.apk`、`MaaEnd-<tag>-x86_64.apk` |
+
+release 包签名需要仓库 Secrets：`KEYSTORE_BASE64`、`KEYSTORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD`；未配置时产出未签名包。

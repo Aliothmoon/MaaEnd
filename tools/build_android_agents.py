@@ -273,7 +273,7 @@ def build_cpp(
     log(f"[OK] {out_so}")
 
 
-def build_go(*, ndk: Path, abi: str, api: int, out_so: Path) -> None:
+def build_go(*, ndk: Path, abi: str, api: int, version: str, out_so: Path) -> None:
     go = shutil.which("go")
     if not go:
         die("go not found on PATH")
@@ -302,9 +302,10 @@ def build_go(*, ndk: Path, abi: str, api: int, out_so: Path) -> None:
     cmd = [
         go,
         "build",
-        "-mod=vendor",
+        "-mod=readonly",
         "-trimpath",
         "-buildvcs=false",
+        f"-ldflags=-X main.Version={version}",
         "-o",
         str(out_so),
         ".",
@@ -316,7 +317,12 @@ def build_go(*, ndk: Path, abi: str, api: int, out_so: Path) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build Android agents into MaaFwApp jniLibs layout")
     parser.add_argument("--ndk", help="Android NDK root")
-    parser.add_argument("--abi", default=DEFAULT_ABI, choices=sorted(GOARCH_BY_ABI))
+    parser.add_argument(
+        "--abi",
+        action="append",
+        choices=sorted(GOARCH_BY_ABI),
+        help=f"target ABI, repeatable (default {DEFAULT_ABI})",
+    )
     parser.add_argument("--api", type=int, default=DEFAULT_API, help="Android API level (default 23)")
     parser.add_argument(
         "--maafw-version",
@@ -328,6 +334,11 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=ROOT / "Android" / "agent-dist",
         help="agent.sourceDir (default Android/agent-dist)",
+    )
+    parser.add_argument(
+        "--version",
+        default=os.environ.get("MAAEND_VERSION", "dev"),
+        help="go-service main.Version (default dev)",
     )
     parser.add_argument("--skip-download", action="store_true")
     parser.add_argument("--skip-cpp", action="store_true")
@@ -347,30 +358,40 @@ def main() -> None:
     ndk = find_ndk(args.ndk)
     os.environ["ANDROID_NDK_ROOT"] = str(ndk)
     log(f"[NDK] {ndk}")
-    out_dir = args.out.resolve() / args.abi / "jniLibs"
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    if not args.skip_cpp:
-        cmake = find_cmake()
+    cmake = None if args.skip_cpp else find_cmake()
+    if cmake:
         log(f"[CMAKE] {cmake}")
-        deps_dir = ROOT / "deps-android"
-        prepare_maadeps(args.abi)
-        prepare_maafw(deps_dir, args.maafw_version, args.abi, args.skip_download)
-        build_cpp(
-            cmake=cmake,
-            abi=args.abi,
-            out_so=out_dir / "libcpp-algo.so",
-        )
 
-    if not args.skip_go:
-        build_go(ndk=ndk, abi=args.abi, api=args.api, out_so=out_dir / "libgo-service.so")
+    out_dirs: list[Path] = []
+    for abi in dict.fromkeys(args.abi or [DEFAULT_ABI]):
+        log(f"[ABI] {abi}")
+        out_dir = args.out.resolve() / abi / "jniLibs"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_dirs.append(out_dir)
+
+        if cmake:
+            # 每个 ABI 一份链接期 SDK，与 CMakePresets.json 中 Android 预设的 DEPS_DIR 对应
+            deps_dir = ROOT / "deps-android" / abi
+            prepare_maadeps(abi)
+            prepare_maafw(deps_dir, args.maafw_version, abi, args.skip_download)
+            build_cpp(cmake=cmake, abi=abi, out_so=out_dir / "libcpp-algo.so")
+
+        if not args.skip_go:
+            build_go(
+                ndk=ndk,
+                abi=abi,
+                api=args.api,
+                version=args.version,
+                out_so=out_dir / "libgo-service.so",
+            )
 
     log("")
-    log(f"[DONE] {out_dir}")
-    for name in ("libgo-service.so", "libcpp-algo.so"):
-        path = out_dir / name
-        if path.is_file():
-            log(f"       {path}  ({path.stat().st_size} bytes)")
+    for out_dir in out_dirs:
+        log(f"[DONE] {out_dir}")
+        for name in ("libgo-service.so", "libcpp-algo.so"):
+            path = out_dir / name
+            if path.is_file():
+                log(f"       {path}  ({path.stat().st_size} bytes)")
 
 
 if __name__ == "__main__":
