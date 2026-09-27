@@ -264,9 +264,10 @@ def build_cpp(
         ],
         cwd=source,
     )
-    built = next(build_dir.rglob("libcpp-algo.so"), None)
-    if built is None:
-        die(f"libcpp-algo.so not produced under {build_dir}")
+    # cpp-algo 是可执行目标；按 jniLibs 约定改名为 lib*.so 才会被打进 APK
+    built = build_dir / "bin" / "RelWithDebInfo" / "cpp-algo"
+    if not built.is_file():
+        die(f"cpp-algo not produced under {build_dir}")
     out_so.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(built, out_so)
     log(f"[OK] {out_so}")
