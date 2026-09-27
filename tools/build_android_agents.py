@@ -27,7 +27,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 MFW_REPO = "MaaXYZ/MaaFramework"
-DEFAULT_MAAFW_TAG = "v5.12.3"
+DEFAULT_MAAFW_TAG = "v5.14.0"
 DEFAULT_ABI = "arm64-v8a"
 DEFAULT_API = 23
 DEFAULT_TRIPLET = "maa-arm64-android"
