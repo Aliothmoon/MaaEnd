@@ -45,7 +45,7 @@ inline bool IsLinuxControllerType(std::string_view controller_type)
 // 顺序找, 基础资源永远排最后。云游戏与本地 ADB 在控制器类型上无法区分, 所以 resource_cloud_adb 不参与。
 inline std::vector<std::filesystem::path> ResourceImageRoots(std::string_view controller_type)
 {
-    const std::filesystem::path install_dir = std::filesystem::absolute(get_exe_dir() / "..");
+    const std::filesystem::path install_dir = std::filesystem::absolute(get_install_dir());
 
     std::vector<std::string> dirs;
     if (IsPlayCoverControllerType(controller_type)) {

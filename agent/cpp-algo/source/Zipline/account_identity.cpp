@@ -46,7 +46,7 @@ std::filesystem::path salt_path()
 {
     // go-service 的工作目录是 <install>，其 debug/record/random_salt.txt 与这里从
     // <install>/agent/cpp-algo.exe 锚定出来的是同一个文件。
-    return get_exe_dir() / ".." / "debug" / "record" / "random_salt.txt";
+    return get_install_dir() / "debug" / "record" / "random_salt.txt";
 }
 
 std::string trim(std::string value)
