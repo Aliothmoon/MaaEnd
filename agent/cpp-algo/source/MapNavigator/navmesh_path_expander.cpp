@@ -231,8 +231,8 @@ std::optional<std::filesystem::path> FindExistingFromParents(const std::filesyst
 std::filesystem::path ResolveNavmeshFile(const std::string& configured_path)
 {
     std::error_code ec;
-    const std::filesystem::path exe_dir = get_exe_dir();
-    const std::filesystem::path navmesh_dir = exe_dir / ".." / "resource" / "model" / "map" / "navmesh";
+    const std::filesystem::path install_dir = get_install_dir();
+    const std::filesystem::path navmesh_dir = install_dir / "resource" / "model" / "map" / "navmesh";
 
     if (!configured_path.empty()) {
         const std::filesystem::path configured = MAA_NS::path(configured_path);
@@ -243,7 +243,7 @@ std::filesystem::path ResolveNavmeshFile(const std::string& configured_path)
         // CWD-walk for dev. If it exists nowhere, we intentionally return the exe-anchored path rather
         // than the bare relative one so a not-found diagnostic names the deployed location instead of a
         // CWD-relative path that only resolves in dev.
-        const std::filesystem::path anchored = exe_dir / ".." / configured;
+        const std::filesystem::path anchored = install_dir / configured;
         if (std::filesystem::exists(anchored, ec) && !ec) {
             return anchored;
         }
@@ -1350,7 +1350,7 @@ std::filesystem::path ResolveNavmeshFilePath(const std::string& configured_path)
 
 std::filesystem::path NoGoTablePath()
 {
-    return get_exe_dir() / ".." / kNoGoTableRelativePath;
+    return get_install_dir() / kNoGoTableRelativePath;
 }
 
 void NormalizeLivePositionToBase(const NaviParam& param, NaviPosition& pos)
