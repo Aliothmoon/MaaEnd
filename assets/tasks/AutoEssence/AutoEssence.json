@@ -362,6 +362,9 @@
                         "AutoEssenceChooseScaling2": {
                             "enabled": false
                         },
+                        "AutoEssenceLowSpFallbackScaling1": {
+                            "enabled": false
+                        },
                         "AutoEssenceDismissWarningSanityLowContinue": {
                             "enabled": false
                         }
@@ -383,6 +386,9 @@
                             "enabled": false
                         },
                         "AutoEssenceChooseScaling2": {
+                            "enabled": true
+                        },
+                        "AutoEssenceLowSpFallbackScaling1": {
                             "enabled": true
                         },
                         "AutoEssenceDismissWarningSanityLowContinue": {
@@ -416,6 +422,9 @@
                         "AutoEssenceChooseScaling2": {
                             "enabled": false
                         },
+                        "AutoEssenceLowSpFallbackScaling1": {
+                            "enabled": false
+                        },
                         "AutoEssenceDismissWarningSanityLowContinue": {
                             "enabled": false
                         }
@@ -437,6 +446,9 @@
                             "enabled": false
                         },
                         "AutoEssenceChooseScaling2": {
+                            "enabled": true
+                        },
+                        "AutoEssenceLowSpFallbackScaling1": {
                             "enabled": true
                         },
                         "AutoEssenceDismissWarningSanityLowContinue": {
@@ -470,6 +482,9 @@
                         "AutoEssenceChooseScaling2": {
                             "enabled": false
                         },
+                        "AutoEssenceLowSpFallbackScaling1": {
+                            "enabled": false
+                        },
                         "AutoEssenceDismissWarningSanityLowContinue": {
                             "enabled": false
                         },
@@ -501,6 +516,9 @@
                             "enabled": false
                         },
                         "AutoEssenceChooseScaling2": {
+                            "enabled": true
+                        },
+                        "AutoEssenceLowSpFallbackScaling1": {
                             "enabled": true
                         },
                         "AutoEssenceDismissWarningSanityLowContinue": {
