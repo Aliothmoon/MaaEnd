@@ -9,7 +9,7 @@ MaaFwApp 只认 `agent.sourceDir/<abi>/jniLibs/lib*.so`，构建期由 `syncAgen
 ```bash
 git submodule update --init --recursive
 python tools/build_android_agents.py
-python Android/MaaFwApp/scripts/setup_maa_framework.py --abi arm64-v8a --tag v5.12.3
+python Android/MaaFwApp/scripts/setup_maa_framework.py --abi arm64-v8a --tag v5.14.0
 ```
 
 在 `Android/MaaFwApp/local.properties` 里写（不进 git）：
