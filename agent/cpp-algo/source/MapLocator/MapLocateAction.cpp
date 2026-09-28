@@ -282,7 +282,8 @@ bool UsesAdbMinimapRoi(std::string_view controller_type)
                });
     };
 
-    return equals_ignore_case("adb") || equals_ignore_case("playcover") || equals_ignore_case("play_cover");
+    return equals_ignore_case("adb") || equals_ignore_case("playcover") || equals_ignore_case("play_cover")
+           || equals_ignore_case("native_android");
 }
 
 bool TryLocateOnMinimap(MaaContext* context, const MaaImageBuffer* image, const LocateOptions& options, LocateResult* out_result)
