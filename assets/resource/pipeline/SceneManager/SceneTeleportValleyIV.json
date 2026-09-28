@@ -1002,8 +1002,8 @@
             "zone": "ValleyIV",
             "icon": "TeleportAnchor",
             "at": [
-                1098.7,
-                457.4
+                1100.6,
+                457.3
             ]
         },
         "pre_delay": 0,
@@ -1432,8 +1432,8 @@
             "zone": "ValleyIV",
             "icon": "TeleportAnchor",
             "at": [
-                649.6,
-                382.0
+                649.8,
+                382.1
             ]
         },
         "pre_delay": 0,
