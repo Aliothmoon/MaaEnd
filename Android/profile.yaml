@@ -25,11 +25,13 @@ agent:
   runtimes:
     - location: nativeLibs
       executable: libgo-service.so
+      name: go-service
       env:
         LD_LIBRARY_PATH: "{nativeLibs}"
         MAAFW_BINARY_PATH: "{nativeLibs}"
     - location: nativeLibs
       executable: libcpp-algo.so
+      name: cpp-algo
       env:
         LD_LIBRARY_PATH: "{nativeLibs}"
         MAAFW_BINARY_PATH: "{nativeLibs}"
