@@ -7,13 +7,13 @@
     },
     "EnterCameraModeLongPress": {
         "action": "TouchDown",
-        "auto_up": true,
         "target": [
             1163,
             269,
             23,
             20
-        ]
+        ],
+        "auto_up": true
     },
     "EnterCameraModeChooseCamera": {
         "action": "TouchMove",

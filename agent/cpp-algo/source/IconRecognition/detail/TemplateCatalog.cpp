@@ -159,8 +159,7 @@ std::filesystem::path ResolveIconPath(const std::filesystem::path& image_root, c
             continue;
         }
         const auto name = directory.path().filename().native();
-        if (name.empty()
-            || !std::ranges::all_of(name, [](auto character) { return character >= '0' && character <= '9'; })) {
+        if (name.empty() || !std::ranges::all_of(name, [](auto character) { return character >= '0' && character <= '9'; })) {
             continue;
         }
         const auto path = directory.path() / (icon_id + ".png");

@@ -535,9 +535,8 @@ std::vector<detail::PreparedTemplate> SelectRegionUnavailableVariants(
     return result;
 }
 
-std::vector<detail::PreparedTemplate> SelectBigVariants(
-    const std::vector<detail::PreparedTemplate>& big,
-    const std::vector<detail::PreparedTemplate>& selected)
+std::vector<detail::PreparedTemplate>
+    SelectBigVariants(const std::vector<detail::PreparedTemplate>& big, const std::vector<detail::PreparedTemplate>& selected)
 {
     std::vector<detail::PreparedTemplate> result;
     for (const auto& original : selected) {
@@ -656,15 +655,9 @@ public:
         return TemplatesForSize(TemplateSizeFor(type, grid_scale));
     }
 
-    const std::vector<detail::PreparedTemplate>& TemplatesForSize(int target_size) const
-    {
-        return catalog_.load(target_size);
-    }
+    const std::vector<detail::PreparedTemplate>& TemplatesForSize(int target_size) const { return catalog_.load(target_size); }
 
-    const std::vector<detail::PreparedTemplate>& BigTemplatesForSize(int target_size) const
-    {
-        return catalog_.loadBig(target_size);
-    }
+    const std::vector<detail::PreparedTemplate>& BigTemplatesForSize(int target_size) const { return catalog_.loadBig(target_size); }
 
     const std::vector<detail::PreparedTemplate>& RoiTemplates(int target_size) const { return catalog_.load(target_size); }
 
@@ -793,8 +786,8 @@ public:
                         TemplatesForSize(AlternateTemplateSizeFor(grid_scale)),
                         request.candidates,
                         detail::DefaultItemFilters(request.grid_type));
-                    big_alternate_selected = SelectBigVariants(
-                        BigTemplatesForSize(AlternateTemplateSizeFor(grid_scale)), alternate_selected);
+                    big_alternate_selected =
+                        SelectBigVariants(BigTemplatesForSize(AlternateTemplateSizeFor(grid_scale)), alternate_selected);
                 }
                 if (performance) {
                     performance->template_selection_ms += ElapsedMilliseconds(selection_started);
@@ -859,8 +852,8 @@ public:
                     request.subpixel_threshold,
                     performance_ptr,
                     transfer_foreground_texture);
-                if ((request.grid_type == GridType::Valuables || request.grid_type == GridType::Rewards)
-                    && evaluation.ranking.fallback_used && !evaluation.accepted) {
+                if ((request.grid_type == GridType::Valuables || request.grid_type == GridType::Rewards) && evaluation.ranking.fallback_used
+                    && !evaluation.accepted) {
                     const int fallback_template_size = AlternateTemplateSizeFor(grid_scale);
                     const cv::Rect fallback_slot = SlotFor(request.grid_type, cell, grid_scale, fallback_template_size);
                     const auto fallback_rarity = rarity;
@@ -927,8 +920,7 @@ public:
                         performance_ptr,
                         transfer_foreground_texture);
                     if (!big.accepted && !big_alternate_selected.empty()) {
-                        const cv::Rect big_slot = SlotFor(
-                            request.grid_type, cell, grid_scale, AlternateTemplateSizeFor(grid_scale));
+                        const cv::Rect big_slot = SlotFor(request.grid_type, cell, grid_scale, AlternateTemplateSizeFor(grid_scale));
                         CellEvaluation alternate_big = EvaluateCellTemplates(
                             image,
                             request.grid_type,

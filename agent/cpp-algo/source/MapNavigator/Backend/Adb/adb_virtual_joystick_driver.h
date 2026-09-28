@@ -44,6 +44,7 @@ public:
     bool PulseForward(int hold_millis);
     bool Release(int delay_millis);
     bool SetWalking(bool walking);
+
     bool walking() const { return walking_; }
 
 private:

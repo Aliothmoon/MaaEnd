@@ -13,14 +13,14 @@
     "__AutoFightActionAttackTouchDown": {
         "pre_delay": 0,
         "action": "TouchDown",
-        "auto_up": true,
         "target": [
             600,
             320,
             80,
             80
         ],
-        "post_delay": 0
+        "post_delay": 0,
+        "auto_up": true
     },
     "__AutoFightActionAttackTouchUp": {
         "pre_delay": 0,
@@ -86,8 +86,8 @@
         "pre_delay": 0,
         "action": "KeyDown",
         "key": 18,
-        "auto_up": true,
-        "post_delay": 0
+        "post_delay": 0,
+        "auto_up": true
     },
     "__AutoFightActionEndSkillAltKeyUp": {
         "desc": "alt按键",
@@ -101,8 +101,8 @@
         "pre_delay": 0,
         "action": "KeyDown",
         "key": 83,
-        "auto_up": true,
-        "post_delay": 0
+        "post_delay": 0,
+        "auto_up": true
     },
     "__AutoFightActionMoveBackKeyUp": {
         "desc": "S键",
@@ -116,8 +116,8 @@
         "pre_delay": 0,
         "action": "KeyDown",
         "key": 87,
-        "auto_up": true,
-        "post_delay": 0
+        "post_delay": 0,
+        "auto_up": true
     },
     "__AutoFightActionMoveForwardKeyUp": {
         "desc": "W键",
@@ -131,8 +131,8 @@
         "pre_delay": 0,
         "action": "KeyDown",
         "key": 65,
-        "auto_up": true,
-        "post_delay": 0
+        "post_delay": 0,
+        "auto_up": true
     },
     "__AutoFightActionMoveLeftKeyUp": {
         "desc": "A键",
@@ -146,8 +146,8 @@
         "pre_delay": 0,
         "action": "KeyDown",
         "key": 68,
-        "auto_up": true,
-        "post_delay": 0
+        "post_delay": 0,
+        "auto_up": true
     },
     "__AutoFightActionMoveRightKeyUp": {
         "desc": "D键",
