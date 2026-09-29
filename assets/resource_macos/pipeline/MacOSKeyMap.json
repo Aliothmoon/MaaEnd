@@ -42,6 +42,14 @@
             }
         }
     },
+    "AutoEssenceCapacityCloseValuables": {
+        "action": {
+            "type": "ClickKey",
+            "param": {
+                "key": 53
+            }
+        }
+    },
     "AutoPickFalls": {
         "action": {
             "type": "ClickKey",
