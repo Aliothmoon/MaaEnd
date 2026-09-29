@@ -34,10 +34,10 @@
                 "threshold": 0.9
             }
         },
+        "pre_delay": 0,
         "action": {
             "type": "DoNothing"
         },
-        "pre_delay": 0,
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
@@ -61,10 +61,10 @@
                 "threshold": 0.9
             }
         },
+        "pre_delay": 0,
         "action": {
             "type": "Click"
         },
-        "pre_delay": 0,
         "post_wait_freezes": 400,
         "post_delay": 0,
         "rate_limit": 0,
@@ -163,10 +163,10 @@
                 "order_by": "Score"
             }
         },
+        "pre_delay": 0,
         "action": {
             "type": "Click"
         },
-        "pre_delay": 0,
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
@@ -189,10 +189,10 @@
                 ]
             }
         },
+        "pre_delay": 0,
         "action": {
             "type": "DoNothing"
         },
-        "pre_delay": 0,
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
@@ -215,10 +215,10 @@
                 ]
             }
         },
+        "pre_delay": 0,
         "action": {
             "type": "Click"
         },
-        "pre_delay": 0,
         "post_wait_freezes": {
             "time": 300,
             "target": [
@@ -250,9 +250,6 @@
                 ]
             }
         },
-        "action": {
-            "type": "DoNothing"
-        },
         "pre_wait_freezes": {
             "time": 200,
             "target": [
@@ -263,6 +260,9 @@
             ]
         },
         "pre_delay": 0,
+        "action": {
+            "type": "DoNothing"
+        },
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
@@ -299,10 +299,10 @@
                 "count": 30
             }
         },
+        "pre_delay": 0,
         "action": {
             "type": "Click"
         },
-        "pre_delay": 0,
         "post_wait_freezes": {
             "time": 200,
             "target": [
@@ -348,10 +348,10 @@
                 "count": 30
             }
         },
+        "pre_delay": 0,
         "action": {
             "type": "DoNothing"
         },
-        "pre_delay": 0,
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
@@ -388,10 +388,10 @@
                 "count": 30
             }
         },
+        "pre_delay": 0,
         "action": {
             "type": "Click"
         },
-        "pre_delay": 0,
         "post_wait_freezes": {
             "time": 200,
             "target": [
@@ -437,10 +437,10 @@
                 "count": 30
             }
         },
+        "pre_delay": 0,
         "action": {
             "type": "DoNothing"
         },
-        "pre_delay": 0,
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
@@ -477,10 +477,10 @@
                 "count": 30
             }
         },
+        "pre_delay": 0,
         "action": {
             "type": "Click"
         },
-        "pre_delay": 0,
         "post_wait_freezes": {
             "time": 200,
             "target": [
@@ -526,10 +526,10 @@
                 "count": 30
             }
         },
+        "pre_delay": 0,
         "action": {
             "type": "DoNothing"
         },
-        "pre_delay": 0,
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
@@ -566,10 +566,10 @@
                 "count": 30
             }
         },
+        "pre_delay": 0,
         "action": {
             "type": "Click"
         },
-        "pre_delay": 0,
         "post_wait_freezes": {
             "time": 200,
             "target": [
@@ -615,10 +615,10 @@
                 "count": 30
             }
         },
+        "pre_delay": 0,
         "action": {
             "type": "DoNothing"
         },
-        "pre_delay": 0,
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
@@ -655,10 +655,10 @@
                 "count": 30
             }
         },
+        "pre_delay": 0,
         "action": {
             "type": "Click"
         },
-        "pre_delay": 0,
         "post_wait_freezes": {
             "time": 200,
             "target": [
@@ -703,10 +703,10 @@
                 "count": 30
             }
         },
+        "pre_delay": 0,
         "action": {
             "type": "DoNothing"
         },
-        "pre_delay": 0,
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
@@ -729,10 +729,10 @@
                 ]
             }
         },
+        "pre_delay": 0,
         "action": {
             "type": "DoNothing"
         },
-        "pre_delay": 0,
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
@@ -755,10 +755,10 @@
                 ]
             }
         },
+        "pre_delay": 0,
         "action": {
             "type": "Click"
         },
-        "pre_delay": 0,
         // 只等「已选择」数字静止。整条底栏含滚动黄条，永远等不满，会空等默认 20 秒
         "post_wait_freezes": {
             "time": 200,
@@ -873,10 +873,10 @@
                 ]
             }
         },
+        "pre_delay": 0,
         "action": {
             "type": "Click"
         },
-        "pre_delay": 0,
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
@@ -902,10 +902,10 @@
                 ]
             }
         },
+        "pre_delay": 0,
         "action": {
             "type": "DoNothing"
         },
-        "pre_delay": 0,
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
@@ -931,10 +931,10 @@
                 ]
             }
         },
+        "pre_delay": 0,
         "action": {
             "type": "Click"
         },
-        "pre_delay": 0,
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
@@ -957,10 +957,10 @@
                 ]
             }
         },
+        "pre_delay": 0,
         "action": {
             "type": "DoNothing"
         },
-        "pre_delay": 0,
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
@@ -972,6 +972,7 @@
     },
     "AutoEssenceCapacityClickRewardClose": {
         "desc": "等关闭按钮静止后再点。弹窗还在就再点一次",
+        "max_hit": 3,
         "recognition": {
             "type": "And",
             "param": {
@@ -982,18 +983,17 @@
                 "box_index": 0
             }
         },
-        "action": {
-            "type": "Click"
-        },
         // 与 CloseRewardsButton 相同：先等按钮静止，避免弹窗动画吃掉点击
         "pre_wait_freezes": {
             "time": 50,
             "timeout": 1000
         },
         "pre_delay": 0,
+        "action": {
+            "type": "Click"
+        },
         "post_delay": 0,
         "rate_limit": 0,
-        "max_hit": 3,
         "next": [
             "AutoEssenceCapacityRewardClosed",
             "AutoEssenceCapacityClickRewardClose"
@@ -1009,10 +1009,10 @@
                 ]
             }
         },
+        "pre_delay": 0,
         "action": {
             "type": "DoNothing"
         },
-        "pre_delay": 0,
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
@@ -1038,10 +1038,10 @@
                 ]
             }
         },
+        "pre_delay": 0,
         "action": {
             "type": "Click"
         },
-        "pre_delay": 0,
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
@@ -1065,10 +1065,10 @@
                 ]
             }
         },
+        "pre_delay": 0,
         "action": {
             "type": "Click"
         },
-        "pre_delay": 0,
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
@@ -1077,13 +1077,13 @@
     },
     "AutoEssenceCapacitySelectFailed": {
         "desc": "没有可分解的基质，库存仍高于阈值，任务失败",
+        "pre_delay": 0,
         "action": {
             "type": "Custom",
             "param": {
                 "custom_action": "325"
             }
         },
-        "pre_delay": 0,
         "post_delay": 0,
         "rate_limit": 0,
         "focus": {
@@ -1092,6 +1092,7 @@
     },
     "AutoEssenceCapacityCloseValuables": {
         "desc": "武器基质页按一次 Esc，回到主菜单",
+        "max_hit": 1,
         "recognition": {
             "type": "And",
             "param": {
@@ -1100,14 +1101,13 @@
                 ]
             }
         },
+        "pre_delay": 0,
         "action": {
             "type": "ClickKey",
             "param": {
                 "key": 27
             }
         },
-        "max_hit": 1,
-        "pre_delay": 0,
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
@@ -1125,10 +1125,10 @@
                 ]
             }
         },
+        "pre_delay": 0,
         "action": {
             "type": "DoNothing"
         },
-        "pre_delay": 0,
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
@@ -1146,10 +1146,10 @@
                 ]
             }
         },
+        "pre_delay": 0,
         "action": {
             "type": "DoNothing"
         },
-        "pre_delay": 0,
         "post_delay": 0,
         "rate_limit": 0,
         "next": []
