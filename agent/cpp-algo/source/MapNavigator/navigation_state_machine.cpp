@@ -1320,7 +1320,10 @@ bool NavigationStateMachine::TickNavigate()
     // 紧随其后的 HEADING 转身也从对齐后的镜头起算。
     if (runtime_state_.camera_align_pending) {
         runtime_state_.camera_align_pending = false;
-        semantic_nodes::AlignCameraToCharacterOnce(semantic_ctx);
+        semantic_nodes::AlignCameraToHeadingOnce(semantic_ctx);
+        if (!position_->valid) {
+            return HandleLocalizationLoss();
+        }
     }
 
     if (runtime_state_.cross_tier_escape.active) {
@@ -1350,6 +1353,9 @@ bool NavigationStateMachine::TickNavigate()
     }
     if (inline_semantic_result.stay_in_current_tick) {
         return true;
+    }
+    if (!position_->valid) {
+        return HandleLocalizationLoss();
     }
     if (!session_->HasCurrentWaypoint()) {
         session_->NoteRouteTailConsumed(*position_, "route_tail_consumed");
@@ -1565,6 +1571,9 @@ bool NavigationStateMachine::TickNavigate()
                     semantic_nodes::SettleAtStrictGoal(semantic_ctx, waypoint);
                     // 收尾里的转镜头没走操舵那条路, 在途转角账认不出来, 清掉重新起算
                     runtime_state_.steering_rate.Reset();
+                    if (!position_->valid) {
+                        return HandleLocalizationLoss();
+                    }
                 }
                 // 走路买的是接近段和收尾的精度, 到点就还回去: 跳跃、冲刺这些动作照旧在慢跑态下执行
                 walk_mode_.Request(false);

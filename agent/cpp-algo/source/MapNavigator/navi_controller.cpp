@@ -80,7 +80,7 @@ bool NaviController::Navigate(const NaviParam& requested_param)
     NaviParam param = requested_param;
 
     ActionWrapper action_wrapper(ctx_);
-    PositionProvider position_provider(action_wrapper.GetCtrl(), maplocator::getOrInitLocator());
+    PositionProvider position_provider(action_wrapper.GetCtrl(), maplocator::getOrInitLocator(), param.heading_source);
     position_provider.ResetTracking();
     if (param.normalize_position_via_navmesh) {
         position_provider.SetPositionNormalizer([&param](NaviPosition& pos) { NormalizeLivePositionToBase(param, pos); });
