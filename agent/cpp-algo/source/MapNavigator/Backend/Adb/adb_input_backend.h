@@ -31,6 +31,8 @@ struct AdbActionButtonLayout
     AdbTapTarget jump_button { { 1166, 475 }, 3 };
     AdbTapTarget attack_button { { 1030, 551 }, 4 };
     AdbTapTarget interact_button { { 1080, 390 }, 5 };
+    AdbTapTarget zipline_launch_button { { 1099, 526 }, 6 };
+    AdbTapTarget zipline_dismount_button { { 1166, 411 }, 7 };
     int default_hold_ms = 50;
     int post_action_delay_ms = 0;
 };
@@ -46,6 +48,7 @@ public:
     bool is_supported() const override;
     const std::string& unsupported_reason() const override;
     double default_turn_units_per_degree() const override;
+    double default_pitch_units_per_degree() const override;
     SteeringTransportProfile steering_transport_profile() const override;
     bool supports_sprint() const override;
 
@@ -63,6 +66,8 @@ public:
     void ClickMouseLeftSync() override;
     void MouseRightDownSync(int delay_millis) override;
     void MouseRightUpSync(int delay_millis) override;
+    void TriggerZiplineLaunchSync() override;
+    void TriggerZiplineDismountSync(int hold_millis) override;
     bool SendViewDeltaSync(int dx, int dy) override;
 
 private:
