@@ -57,7 +57,10 @@ git add Android/MaaFwApp
 
 | 触发 | 产物 |
 | --- | --- |
-| push / PR（`Android/`、`agent/`、构建脚本变更） | `MaaEnd-<tag>-arm64-v8a-debug.apk` |
-| `v*` tag，或手动运行选 `assemble=release` | `MaaEnd-<tag>-universal.apk`、`MaaEnd-<tag>-arm64-v8a.apk`、`MaaEnd-<tag>-x86_64.apk` |
+| push / PR（`Android/`、`agent/`、构建脚本变更） | `MaaEnd-android-arm64-v8a-<tag>-debug.apk` |
+| 手动运行选 `assemble=release` | `MaaEnd-android-universal-<tag>.apk`、`MaaEnd-android-arm64-v8a-<tag>.apk`、`MaaEnd-android-x86_64-<tag>.apk` |
+| `v*` tag（由 `install.yml` 调用） | 同上，并随桌面包一起上传到 Release |
+
+上面两种只上传为 Actions artifact；正式版的 APK 进 Release 后，由 `mirrorchyan_release.yml` 上传到 Mirror酱 的 `MaaEnd_exec`（os `android`，arm64-v8a / x86_64 各一个架构，universal 不带架构）。
 
 release 包签名需要仓库 Secrets：`KEYSTORE_BASE64`、`KEYSTORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD`；未配置时产出未签名包。

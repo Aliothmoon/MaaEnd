@@ -1,9 +1,8 @@
 name: build-android-apk
 
+# 正式版（v* tag）不在这里单独触发：由 install.yml 以 workflow_call 调用，APK 与桌面包一起进 Release
 on:
   push:
-    tags:
-      - "v*"
     branches:
       - "v2"
     paths:
@@ -31,6 +30,22 @@ on:
         required: false
         type: string
         default: ""
+  workflow_call:
+    inputs:
+      assemble:
+        type: string
+        default: release
+      ref:
+        description: "构建的 git ref，留空取触发事件的 ref"
+        type: string
+        default: ""
+      tag:
+        description: "APK 文件名里的版本，留空按 git describe 计算"
+        type: string
+        default: ""
+      maafw_version:
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -55,18 +70,17 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          ref: ${{ inputs.ref || github.ref }}
           fetch-depth: 0
           persist-credentials: false
 
       - id: mode
+        env:
+          INPUT_ASSEMBLE: ${{ inputs.assemble }}
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            assemble="${{ inputs.assemble }}"
-          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            assemble=release
-          else
-            assemble=debug
-          fi
+          # 手动运行与 workflow_call 都带 assemble；push / PR 只出 debug
+          assemble="${INPUT_ASSEMBLE:-debug}"
 
           # debug 只出 arm64-v8a 包（真机测试用），agent 也只编这一个 ABI；release 出 universal 与两个单 ABI 包
           if [[ "$assemble" == release ]]; then
@@ -77,7 +91,7 @@ jobs:
             abis='["arm64-v8a"]'
           fi
 
-          tag=$(git describe --tags --match "v*" HEAD 2>/dev/null || git rev-parse --short HEAD)
+          tag="${INPUT_TAG:-$(git describe --tags --match "v*" HEAD 2>/dev/null || git rev-parse --short HEAD)}"
 
           echo "assemble=$assemble" | tee -a "$GITHUB_OUTPUT"
           echo "variants=$variants" | tee -a "$GITHUB_OUTPUT"
@@ -104,6 +118,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          ref: ${{ inputs.ref || github.ref }}
           persist-credentials: false
 
       - name: Initialize MaaUtils submodule
@@ -179,6 +194,7 @@ jobs:
       # 版本号取自最外层仓库的 git describe / 提交数，需要完整历史
       - uses: actions/checkout@v6
         with:
+          ref: ${{ inputs.ref || github.ref }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -259,6 +275,7 @@ jobs:
             ./gradlew --no-daemon assembleDebug
           fi
 
+      # 与桌面包同一命名 MaaEnd-<os>-<arch>-<tag>，Release 与 Mirror酱 上传都按这个名字认包
       # universal 包不能带 ABI 标记：应用内更新按资产名选包，带标记会绕过 universal 回退
       - name: Rename APK
         env:
@@ -271,7 +288,7 @@ jobs:
             echo "::error::预期恰好一个 APK，实际 $count 个"
             exit 1
           fi
-          name="MaaEnd-${VERSION_TAG//\//-}-$VARIANT"
+          name="MaaEnd-android-$VARIANT-${VERSION_TAG//\//-}"
           [[ "$ASSEMBLE" == release ]] || name="$name-debug"
           mv "$dir"/*.apk "$dir/$name.apk"
           echo "APK_PATH=$dir/$name.apk" >> "$GITHUB_ENV"
