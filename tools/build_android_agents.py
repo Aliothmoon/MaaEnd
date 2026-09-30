@@ -30,7 +30,6 @@ MFW_REPO = "MaaXYZ/MaaFramework"
 DEFAULT_MAAFW_TAG = "v5.14.0"
 DEFAULT_ABI = "arm64-v8a"
 DEFAULT_API = 23
-DEFAULT_TRIPLET = "maa-arm64-android"
 GOARCH_BY_ABI = {"arm64-v8a": "arm64", "x86_64": "amd64"}
 CLANG_TRIPLE_BY_ABI = {
     "arm64-v8a": "aarch64-linux-android",
@@ -185,11 +184,10 @@ def prepare_maadeps(abi: str) -> None:
 
 
 def find_sdk_root(extract_root: Path) -> Path:
-    for dirpath, dirnames, _filenames in os.walk(extract_root):
+    for dirpath, _dirnames, _filenames in os.walk(extract_root):
         current = Path(dirpath)
         if (current / "bin").is_dir() and (current / "share").is_dir():
             return current
-        _ = dirnames
     die(f"extracted MaaFramework SDK has no bin+share under {extract_root}")
 
 
