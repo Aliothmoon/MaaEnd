@@ -43,3 +43,7 @@ app:
   id: maaend
   label: MaaEnd
   icon: ../assets/locales/MaaEnd-Tiny.png
+
+# Mirror酱 上 APK 单独发布为 MaaEnd_exec；interface.json 的 mirrorchyan_rid（MaaEnd）是桌面包
+update:
+  mirrorchyanRid: MaaEnd_exec
