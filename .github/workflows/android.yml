@@ -20,7 +20,7 @@ on:
   workflow_dispatch:
     inputs:
       assemble:
-        description: "debug 只出 universal 调试包；release 出 universal / arm64-v8a / x86_64 三个包"
+        description: "debug 只出 arm64-v8a 调试包；release 出 universal / arm64-v8a / x86_64 三个包"
         type: choice
         options:
           - debug
@@ -49,6 +49,7 @@ jobs:
     outputs:
       assemble: ${{ steps.mode.outputs.assemble }}
       variants: ${{ steps.mode.outputs.variants }}
+      abis: ${{ steps.mode.outputs.abis }}
       tag: ${{ steps.mode.outputs.tag }}
       maafw_version: ${{ inputs.maafw_version || steps.maafw-latest-release.outputs.release }}
     steps:
@@ -67,17 +68,20 @@ jobs:
             assemble=debug
           fi
 
-          # debug 只出 universal 验证两个 ABI 都能打包；release 额外出单 ABI 包
+          # debug 只出 arm64-v8a 包（真机测试用），agent 也只编这一个 ABI；release 出 universal 与两个单 ABI 包
           if [[ "$assemble" == release ]]; then
             variants='["universal","arm64-v8a","x86_64"]'
+            abis='["arm64-v8a","x86_64"]'
           else
-            variants='["universal"]'
+            variants='["arm64-v8a"]'
+            abis='["arm64-v8a"]'
           fi
 
           tag=$(git describe --tags --match "v*" HEAD 2>/dev/null || git rev-parse --short HEAD)
 
           echo "assemble=$assemble" | tee -a "$GITHUB_OUTPUT"
           echo "variants=$variants" | tee -a "$GITHUB_OUTPUT"
+          echo "abis=$abis" | tee -a "$GITHUB_OUTPUT"
           echo "tag=$tag" | tee -a "$GITHUB_OUTPUT"
 
       # 与 install.yml 保持一致：取 MaaFramework 最新 release
@@ -96,7 +100,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        abi: [arm64-v8a, x86_64]
+        abi: ${{ fromJSON(needs.meta.outputs.abis) }}
     steps:
       - uses: actions/checkout@v6
         with:

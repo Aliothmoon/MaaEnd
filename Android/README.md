@@ -57,7 +57,7 @@ git add Android/MaaFwApp
 
 | 触发 | 产物 |
 | --- | --- |
-| push / PR（`Android/`、`agent/`、构建脚本变更） | `MaaEnd-<tag>-universal-debug.apk` |
+| push / PR（`Android/`、`agent/`、构建脚本变更） | `MaaEnd-<tag>-arm64-v8a-debug.apk` |
 | `v*` tag，或手动运行选 `assemble=release` | `MaaEnd-<tag>-universal.apk`、`MaaEnd-<tag>-arm64-v8a.apk`、`MaaEnd-<tag>-x86_64.apk` |
 
 release 包签名需要仓库 Secrets：`KEYSTORE_BASE64`、`KEYSTORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD`；未配置时产出未签名包。
