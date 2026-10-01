@@ -13,8 +13,8 @@ _✨ MAA Helper for The End ✨_
 <!-- prettier-ignore-end -->
 
 [![Pipeline](https://img.shields.io/badge/Pipeline-%23876f69?logo=paddypower&logoColor=%23FFFFFF)](https://github.com/MaaXYZ/MaaFramework)
-[![Go](https://img.shields.io/badge/Go-007d9c?logo=go)](https://github.com/MaaEnd/MaaEnd/tree/v2/agent/go-service)
 [![C++](https://img.shields.io/badge/C%2B%2B-00599C?logo=cplusplus)](https://github.com/MaaEnd/MaaEnd/tree/v2/agent/cpp-algo)
+[![Go](https://img.shields.io/badge/Go-007d9c?logo=go)](https://github.com/MaaEnd/MaaEnd/tree/v2/agent/go-service)
 [![license](https://img.shields.io/github/license/MaaEnd/MaaEnd)](https://github.com/MaaEnd/MaaEnd/blob/v2/LICENSE)
 [![platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-blueviolet)](https://maaend.com/)
 [![release](https://img.shields.io/github/v/release/MaaEnd/MaaEnd?label=release)](https://github.com/MaaEnd/MaaEnd/releases)
