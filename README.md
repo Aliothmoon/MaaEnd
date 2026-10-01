@@ -22,7 +22,7 @@ _✨ MAA 终末地小助手 ✨_
 [![stars](https://img.shields.io/github/stars/MaaEnd/MaaEnd?style=flat)](https://github.com/MaaEnd/MaaEnd/stargazers)
 [![commit activity](https://img.shields.io/github/commit-activity/m/MaaEnd/MaaEnd)](https://github.com/MaaEnd/MaaEnd/commits/v2)
 
-Powered by [MaaFramework](https://github.com/MaaXYZ/MaaFramework) & [MXU](https://github.com/MistEO/MXU)
+Powered by [MaaFramework](https://github.com/MaaXYZ/MaaFramework) & [MXU](https://github.com/MistEO/MXU) & [MaaFwApp](https://github.com/Aliothmoon/MaaFwApp)
 
 绝赞开发中 🎉……
 
