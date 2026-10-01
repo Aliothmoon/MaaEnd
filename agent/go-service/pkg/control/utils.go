@@ -7,6 +7,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/MaaXYZ/MaaEnd/agent/go-service/pkg/pienv"
 	maa "github.com/MaaXYZ/maa-framework-go/v4"
 )
 
@@ -26,6 +27,33 @@ const controlTypeNativeAndroid = "native_android"
 type maaControllerInfoDto struct {
 	Type string `json:"type"`
 	HWnd uint64 `json:"hwnd"`
+}
+
+func controlTypeFromPI() string {
+	return controlTypeFromPIType(pienv.ControllerType())
+}
+
+func controlTypeFromPIType(controllerType string) string {
+	switch strings.ToLower(strings.TrimSpace(controllerType)) {
+	case CONTROL_TYPE_ADB, controlTypeNativeAndroid, "playcover":
+		return CONTROL_TYPE_ADB
+	case CONTROL_TYPE_WIN32:
+		return CONTROL_TYPE_WIN32
+	case CONTROL_TYPE_MACOS:
+		return CONTROL_TYPE_MACOS
+	case CONTROL_TYPE_LINUX:
+		return CONTROL_TYPE_LINUX
+	default:
+		return ""
+	}
+}
+
+// ResolveControlType returns PI_CONTROLLER type when MXU injects it; otherwise parses controller.GetInfo().
+func ResolveControlType(ctrl *maa.Controller) (string, error) {
+	if t := controlTypeFromPI(); t != "" {
+		return t, nil
+	}
+	return GetControlType(ctrl)
 }
 
 // GetControlType retrieves the control type of the given controller by parsing its info string.
