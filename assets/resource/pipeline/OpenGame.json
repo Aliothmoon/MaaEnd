@@ -2,7 +2,6 @@
     "OpenGame": {
         "desc": "打开游戏",
         "max_hit": 2,
-        "timeout": 45000,
         "next": [
             "EnterGame",
             "[JumpBack]EnterGameResourceInitializeComplete",
@@ -10,8 +9,7 @@
             "[JumpBack]CloudEndfieldStartGame",
             "[JumpBack]CloudEndfieldWaitStartGame",
             "[JumpBack]CloudEndfieldRetry",
-            "[JumpBack]StartUpGame",
-            "StuckRepairAction"
+            "StartUpGame"
         ]
     },
     "StuckRepairAction": {
@@ -22,8 +20,7 @@
                 "custom_action": "SubTask",
                 "custom_action_param": {
                     "sub": [
-                        "CloseGame",
-                        "ResetStartUpGame"
+                        "CloseGame"
                     ]
                 }
             }
@@ -34,20 +31,6 @@
         ],
         "focus": {
             "Node.Action.Starting": "$task.OpenGame.focus.stuck_repair"
-        }
-    },
-    "ResetStartUpGame": {
-        "desc": "重置启动游戏",
-        "action": {
-            "type": "Custom",
-            "param": {
-                "custom_action": "ClearHitCount",
-                "custom_action_param": {
-                    "nodes": [
-                        "StartUpGame"
-                    ]
-                }
-            }
         }
     },
     "StartUpGameFailed": {
@@ -165,11 +148,28 @@
     },
     "StartUpGame": {
         "desc": "启动游戏,由ADB端option进行覆盖",
-        "max_hit": 20,
-        "post_delay": 3000,
+        "next": [
+            "StartUpGameWait"
+        ],
         "focus": {
             "Node.Action.Failed": "$task.OpenGame.focus.start_app_failed" //多半是Client选错了
         }
+    },
+    "StartUpGameWait": {
+        // 加载期间重复 StartApp 会把渠道 SDK 的登录页顶掉，导致登录失败；拉起后只等不再拉
+        "desc": "等游戏自己走到认得的界面",
+        "timeout": 90000,
+        "next": [
+            "EnterGame",
+            "[JumpBack]EnterGameResourceInitializeComplete",
+            "[JumpBack]EnterGameRecognition",
+            "[JumpBack]CloudEndfieldStartGame",
+            "[JumpBack]CloudEndfieldWaitStartGame",
+            "[JumpBack]CloudEndfieldRetry"
+        ],
+        "on_error": [
+            "StuckRepairAction"
+        ]
     },
     "CloudEndfieldStartGame": {
         "desc": "云终末地开始游戏",
