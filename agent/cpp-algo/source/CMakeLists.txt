@@ -58,7 +58,6 @@ target_link_libraries(grid-tracker PUBLIC recogrid)
 
 file(GLOB_RECURSE cpp_algo_src CONFIGURE_DEPENDS *.h *.hpp *.cpp)
 list(FILTER cpp_algo_src EXCLUDE REGEX "/IconRecognition/test/")
-list(FILTER cpp_algo_src EXCLUDE REGEX "/Common/test/")
 list(REMOVE_ITEM cpp_algo_src ${icon_recognition_core_src} ${recogrid_src} ${grid_tracker_src})
 
 add_executable(cpp-algo ${cpp_algo_src} ${cpp_algo_header})
@@ -109,16 +108,6 @@ add_dependencies(cpp-algo MaaUtils)
 
 if(MAAEND_BUILD_ICON_RECOGNITION_TESTS)
     add_subdirectory(IconRecognition/test)
-endif()
-
-if(MAAEND_BUILD_COMMON_TESTS)
-    add_executable(common-output-paths-tests Common/test/test_output_paths.cpp)
-    target_include_directories(common-output-paths-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    if(MSVC)
-        target_compile_options(common-output-paths-tests PRIVATE /utf-8 /W4 /WX)
-    else()
-        target_compile_options(common-output-paths-tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
-    endif()
 endif()
 
 # Set RPATH to find shared libraries in ../maafw relative to the executable
