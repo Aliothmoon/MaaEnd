@@ -464,6 +464,7 @@ deps-android
 
 config
 debug
+cache/cpp-algo/
 
 # macOS
 .DS_Store

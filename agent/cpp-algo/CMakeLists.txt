@@ -7,6 +7,7 @@ if(APPLE)
 endif()
 
 option(MAAEND_BUILD_ICON_RECOGNITION_TESTS "Build IconRecognition tests" OFF)
+option(MAAEND_BUILD_COMMON_TESTS "Build common utility tests" OFF)
 
 include(MaaUtils/MaaUtils.cmake)
 
