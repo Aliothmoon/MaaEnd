@@ -81,6 +81,7 @@
     "ziplineimport.sign_in_hint": "開いたブラウザーウィンドウで、マップページ右上の「ログイン」をクリックし、ジップライン座標をインポート／更新したいゲームアカウントでログインしてください。",
     "ziplineimport.login_ok": "ログインに成功しました。ジップラインをインポート／更新しています",
     "ziplineimport.region_unsupported": "Linux 版のジップライン取込はグローバルサーバー（SKPORT）にまだ対応していません。リージョンを CN に戻して再試行してください。",
+    "ziplineimport.android_unsupported": "Android 版はジップライン座標の取込にまだ対応していません。",
     "pullcount.error.recognition_failed": "スカウト回数の認識に失敗しました：%s。オペレーター募集画面を開き、上部リソース欄が隠れていないことを確認してください。",
     "pullcount.result": "リソース換算：%d 回\n嵌晶玉：%d = %d 回\n衍質源石を嵌晶玉へ換算した値：%d（源石 %d 個分 = 嵌晶玉 %d を保留、有効 %d = %d 回）\n次バージョンへ持ち越せる券：%d 回\n次バージョン商店：%d 回\n次バージョンログイン：%d 回\n現行プールで使用可能：%d 回\n次バージョンプール合計：%d 回",
     "autoecofarm.invalid_params": "パラメータが不正です",

@@ -82,6 +82,7 @@
     "ziplineimport.sign_in_hint": "In the browser window that just opened, click \"Sign in\" at the top-right of the map page, then sign in with the in-game account whose ziplines you want to import or update.",
     "ziplineimport.login_ok": "Signed in successfully. Importing / updating ziplines…",
     "ziplineimport.region_unsupported": "Zipline import on Linux does not support the global server (SKPORT) yet. Switch the region back to CN and try again.",
+    "ziplineimport.android_unsupported": "Zipline import is not supported on Android yet.",
     "pullcount.error.recognition_failed": "Pull count recognition failed: %s. Make sure the Operator Recruitment screen is open and the top resource bar is visible.",
     "pullcount.result": "Resource conversion: %d pulls\nOroberyl: %d = %d pulls\nEssence Originium converted to Oroberyl: %d (reserve %d Originium = %d Oroberyl, usable %d = %d pulls)\nCarry-over vouchers: %d pulls\nNext-version shop: %d pulls\nNext-version sign-in: %d pulls\nCurrent pool available: %d pulls\nNext-version pool total: %d pulls",
     "autoecofarm.invalid_params": "Invalid parameters",
