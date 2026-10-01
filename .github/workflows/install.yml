@@ -685,6 +685,12 @@ jobs:
     needs: [meta, package_linux_tarball, package_macos_dmg, package_win_zip, changelog, android]
     runs-on: ubuntu-latest
     steps:
+      # 只取生成 Release 正文的脚本
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/scripts
+          show-progress: false
+
       - uses: actions/download-artifact@v7
         with:
           pattern: MaaEnd-*-zip
@@ -737,11 +743,24 @@ jobs:
           rm -rf MaaEnd-*/
           ls -la
 
+      # 正文 = 下载表 + 更新日志；下载表按 artifacts 里实际要上传的文件生成
+      - name: Build release body
+        env:
+          CHANGELOG: ${{ needs.changelog.outputs.release_body }}
+        run: |
+          printf '%s\n' "$CHANGELOG" > "$RUNNER_TEMP/changelog.md"
+          python3 .github/scripts/release_body.py \
+            --artifacts artifacts \
+            --tag "${{ needs.meta.outputs.tag }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --changelog "$RUNNER_TEMP/changelog.md" \
+            --output "$RUNNER_TEMP/release_body.md"
+
       - uses: softprops/action-gh-release@v2
         with:
           files: artifacts/*
           tag_name: ${{ needs.meta.outputs.tag }}
-          body: ${{ needs.changelog.outputs.release_body }}
+          body_path: ${{ runner.temp }}/release_body.md
           draft: false
           prerelease: ${{ needs.meta.outputs.is_prerelease == 'true' }}
 
