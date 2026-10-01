@@ -1958,10 +1958,8 @@ bool NavigationStateMachine::TickNavigate()
                 for (const SteeringRateState::InFlightTurn& turn : steering_rate.in_flight) {
                     (turn.delta_deg < 0.0 ? negative_sent_deg : positive_sent_deg) += turn.delta_deg;
                 }
-                steering_rate.pending_turn_deg = std::clamp(
-                    std::clamp(steering_rate.pending_turn_deg - landed, -owed, owed),
-                    negative_sent_deg,
-                    positive_sent_deg);
+                steering_rate.pending_turn_deg =
+                    std::clamp(std::clamp(steering_rate.pending_turn_deg - landed, -owed, owed), negative_sent_deg, positive_sent_deg);
             }
         }
     }

@@ -169,11 +169,11 @@ struct RouteDiag
     std::string err;
     std::vector<std::string> warn;
     std::vector<double> clearance;
-    std::vector<double> height; // 逐点所在面的高度; 层预言机走不通时清空
+    std::vector<double> height;     // 逐点所在面的高度; 层预言机走不通时清空
     std::vector<size_t> waypoints;
     std::vector<DropLanding> drops; // 台沿下落的落点
     bool crossed_barrier = false;
-    bool hop_barrier = false; // 端点接线的那一跳跨了禁行边
+    bool hop_barrier = false;       // 端点接线的那一跳跨了禁行边
     double snap_start = 0.0;
     double snap_goal = 0.0;
 
