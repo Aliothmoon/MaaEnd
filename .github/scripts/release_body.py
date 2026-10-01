@@ -77,7 +77,7 @@ def build_table(found: dict[tuple[str, str], str], unknown: list[str], base_url:
         if platform == "android":
             parts = []
             if universal := found.get(("android", ANDROID_UNIVERSAL)):
-                parts.append(f"{link('**Universal**', universal)}（推荐）")
+                parts.append(f"{link('**Universal**', universal)}（通用）")
             for abi, abi_row in ANDROID_ROW.items():
                 if abi_row == row and (name := found.get(("android", abi))):
                     parts.append(link(abi, name))
