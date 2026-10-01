@@ -74,11 +74,20 @@ std::wstring utf8ToWide(const std::string& src)
 // 一旦未来 Microsoft 把优先级调成参数 > env var（issue #1338 里 Microsoft
 // 也提过想这样调），第 2 步也能让我们继续命中专属 UDF，向前兼容。
 //
-// 返回的路径固定在启动工作目录下的 cache/cpp-algo/WebView2，
-// 不在可执行文件旁写入，也不混入可能被上传的 debug 日志目录。
+// 保留 agent/<exe>.WebView2 的原有布局，以启动工作目录为根目录。
+// GetModuleFileNameW 仅用于获取 exe 文件名；失败时返回空路径，
+// 调用方回退到 nullptr 让 SDK 自己处理。
 std::filesystem::path redirect_user_data_folder()
 {
-    const std::filesystem::path udf = common::OutputPath("cache/cpp-algo/WebView2");
+    wchar_t exe_buf[MAX_PATH] = {};
+    DWORD len = GetModuleFileNameW(nullptr, exe_buf, MAX_PATH);
+    if (len == 0 || len >= MAX_PATH) {
+        LogWarn << "WebView2: GetModuleFileNameW failed, fall back to inherited UDF env" << VAR(GetLastError());
+        return {};
+    }
+
+    std::filesystem::path udf = common::OutputPath("agent") / std::filesystem::path(exe_buf).filename();
+    udf += L".WebView2";
 
     std::error_code ec;
     std::filesystem::create_directories(udf, ec);
