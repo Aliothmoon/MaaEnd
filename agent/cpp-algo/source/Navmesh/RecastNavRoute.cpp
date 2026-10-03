@@ -1513,8 +1513,10 @@ std::optional<std::vector<WorldPoint>> routeWindow(
 
     // 声明了端点面就按面吸附: 最近的可走格未必带着这张面, 吸上去 goalsOf/startOf 会落空。同距再比
     // 高度差, 让吸附结果跟 atDeck 选的那张 span 一致。
-    const auto nearDeck = [&](const std::vector<uint8_t>& use, const Mask& cells, const CellPt& at, std::optional<double> deck)
-        -> std::pair<std::optional<CellPt>, double> {
+    const auto nearDeck = [&](const std::vector<uint8_t>& use,
+                              const Mask& cells,
+                              const CellPt& at,
+                              std::optional<double> deck) -> std::pair<std::optional<CellPt>, double> {
         if (!deck.has_value()) {
             return nearestCell(cells, at);
         }
@@ -2735,12 +2737,12 @@ RecastPlanResult RecastNavEngine::planLocked(
         // 起点块盖住兜底吸附半径内任一吸附点再外扩一个定类半径
         patched = loadPatch(start, start, kSnapFallbackRadius + kSnapRadius, ps) && loadPatch(goal, goal, kSnapRadius, pg);
         const int64_t deck_rec = patched ? pickDeckRec(
-                                               pg.gw,
-                                               pg.nx,
-                                               pg.ny,
-                                               static_cast<int64_t>((goal.x - pg.x0) / kCS),
-                                               static_cast<int64_t>((goal.y - pg.y0) / kCS),
-                                               *gdk)
+                                     pg.gw,
+                                     pg.nx,
+                                     pg.ny,
+                                     static_cast<int64_t>((goal.x - pg.x0) / kCS),
+                                     static_cast<int64_t>((goal.y - pg.y0) / kCS),
+                                     *gdk)
                                          : -1;
         if (deck_rec >= 0) {
             deck_region = pg.gw.rec[static_cast<size_t>(deck_rec)].rid;
