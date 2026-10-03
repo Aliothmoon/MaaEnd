@@ -2323,5 +2323,9 @@
     "resource/image/GiftOperator/Operators/Purrchena": "89c25d2fbbfea9795c6d1ef434904427b80ef08ac9281fe9007e969e5eecd115",
     "resource/image/IconRecognition/Big/5/item_char_skill_crown": "74e13a7b570e9da9129e6c27b69006b9de74572cf9a28a567c696e22d0cd3ffc",
     "resource/image/IconRecognition/Big/6/item_case_wpn_selfselect_bp_2": "13e07a696228b9a6673971d3eebb563a20cd6a04606bd05685f7f4c1c4c6181e",
-    "resource/image/AutoEssence/EssenceRecycle": "892d6ac1612704d16c1ab111aa48d2eba42d60da8dc675714a5df29f3c465993"
+    "resource/image/AutoEssence/EssenceRecycle": "892d6ac1612704d16c1ab111aa48d2eba42d60da8dc675714a5df29f3c465993",
+    "resource/image/UI/Item/item_charpotentialup_chr_0038_purrche": "65f202536a1a821894a55f18513db26bf9e1f29d13c35d9653a06337a9292900",
+    "resource/image/UI/Item/wpn_sword_0023": "2028a5bc713daabf89a9f78472e57e11838fe0e04f256ab737fa4c4df8b10ae3",
+    "resource/image/IconRecognition/5/item_charpotentialup_chr_0038_purrche": "83de935a22d9296d2482138055bd8be760c1a997d081e6a770d4568bebaa0419",
+    "resource/image/IconRecognition/5/wpn_sword_0023": "6d272aea56ac1a19f4efd27e7a7fff6901ce5883c3292c33169508baab35c2c9"
 }
