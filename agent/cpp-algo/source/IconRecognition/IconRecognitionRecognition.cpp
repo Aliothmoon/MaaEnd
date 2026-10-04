@@ -6,6 +6,7 @@
 #include <mutex>
 #include <stdexcept>
 
+#include <MaaFramework/Instance/MaaContext.h>
 #include <MaaFramework/Utility/MaaBuffer.h>
 #include <MaaUtils/Logger.h>
 #include <meojson/json.hpp>
@@ -147,6 +148,37 @@ void SaveDebugCaptureBestEffort(const cv::Mat& image, const RecognitionResult& r
     }
 }
 
+void SaveVisionCaptureBestEffort(MaaContext* context, const MaaImageBuffer* image) noexcept
+{
+    if (context == nullptr || image == nullptr || MaaImageBufferIsEmpty(image)) {
+        return;
+    }
+    try {
+        // DirectHit 不生成 Vision draw，临时覆写为 1×1 ColorMatch 以触发截图保存。
+        MaaContextRunRecognition(
+            context,
+            "SubTaskExampleStepOne",
+            R"({
+                "SubTaskExampleStepOne": {
+                    "recognition": {
+                        "type": "ColorMatch",
+                        "param": {
+                            "roi": [0, 0, 1, 1],
+                            "method": 40,
+                            "lower": [0, 0, 0],
+                            "upper": [255, 255, 255],
+                            "connected": true,
+                            "count": 1
+                        }
+                    }
+                }
+            })",
+            image);
+    }
+    catch (...) {
+    }
+}
+
 } // namespace
 
 MaaBool MAA_CALL IconRecognitionRun(
@@ -236,6 +268,7 @@ MaaBool MAA_CALL IconRecognitionRun(
         request.deduplicate = ReadBool(object, "deduplicate", request.deduplicate);
         request.recognize_region_unavailable = ReadBool(object, "recognize_region_unavailable", request.recognize_region_unavailable);
         request.debug = debug;
+        SaveVisionCaptureBestEffort(context, image);
         RecognitionResult result = GetRecognizer().recognize(to_mat(image), request);
         if (debug) {
             SaveDebugCaptureBestEffort(to_mat(image), result, task_id);
