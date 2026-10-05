@@ -2520,6 +2520,36 @@
             "SyncShopItemDataInShopNoNotify"
         ]
     },
+    "__ScenePrivateShopExit": {
+        "desc": "要回大世界时人还在采购中心：先退出采购中心。排在奖励弹窗判断之前，商品格不会被误认成奖励弹窗的关闭按钮；真奖励弹窗会把背景整片模糊，此时认不出采购中心，不会抢它的处理",
+        "max_hit": 10,
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": [
+                    "InShop"
+                ]
+            }
+        },
+        "pre_wait_freezes": {
+            "time": 100,
+            "target": [
+                0,
+                0,
+                200,
+                100
+            ]
+        },
+        "pre_delay": 0,
+        "post_delay": 0,
+        "rate_limit": 0,
+        // 退出交给 __ScenePrivateAnyExit：PC 按 ESC、ADB 按返回键、云终末地点右上角 X，各控制器已分别覆盖
+        // 云终末地找不到可点的按钮时由 __ScenePrivateNextTrue 放行，回到上一层继续判断
+        "next": [
+            "__ScenePrivateAnyExit",
+            "__ScenePrivateNextTrue"
+        ]
+    },
     "__ScenePrivateWorldEnterMenuLogin": {
         "desc": "从大世界进入登录菜单",
         "recognition": {

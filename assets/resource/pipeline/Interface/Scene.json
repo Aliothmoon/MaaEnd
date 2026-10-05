@@ -13,6 +13,7 @@
             "__ScenePrivateAnyEnterWorldSuccess",
             "[JumpBack]__ScenePrivateLogin",
             "[JumpBack]SceneNoticeRewardsUpgrade",
+            "[JumpBack]__ScenePrivateShopExit",
             "[JumpBack]SceneNoticeRewardsConfirm",
             "[JumpBack]__ScenePrivateWorldSpaceExit",
             "[JumpBack]__ScenePrivateWorldStorySkip",
