@@ -550,8 +550,8 @@ bool LoadSharedFieldsPack(
             if (!ec) {
                 const auto ticks = mtime.time_since_epoch().count();
                 key = MAA_NS::path_to_utf8_string(abs) + '\n' + std::to_string(size) + '\n'
-                      + std::string(reinterpret_cast<const char*>(&ticks), sizeof(ticks)) + '\n' + std::to_string(main.buildHash())
-                      + '\n' + std::to_string(main.fileFnv());
+                      + std::string(reinterpret_cast<const char*>(&ticks), sizeof(ticks)) + '\n' + std::to_string(main.buildHash()) + '\n'
+                      + std::to_string(main.fileFnv());
             }
         }
     }

@@ -111,6 +111,7 @@ struct FallCache
         int64_t gx;
         int64_t gy;
         float h;
+
         bool operator==(const PointKey& o) const { return gx == o.gx && gy == o.gy && h == o.h; }
     };
 
@@ -118,6 +119,7 @@ struct FallCache
     {
         PointKey a;
         PointKey b;
+
         bool operator==(const EdgeKey& o) const { return a == o.a && b == o.b; }
     };
 
@@ -144,7 +146,10 @@ struct FallCache
 
     struct EdgeHash
     {
-        size_t operator()(const EdgeKey& k) const { return static_cast<size_t>(mix(hashPoint(k.a) + 0x9E3779B97F4A7C15ULL * hashPoint(k.b))); }
+        size_t operator()(const EdgeKey& k) const
+        {
+            return static_cast<size_t>(mix(hashPoint(k.a) + 0x9E3779B97F4A7C15ULL * hashPoint(k.b)));
+        }
     };
 
     std::unordered_map<PointKey, OccluderPoint, PointHash> points;
@@ -2944,7 +2949,8 @@ RecastPlanResult RecastNavEngine::plan(
     const std::function<bool()>& should_stop)
 {
     const std::lock_guard<std::mutex> lock(mutex_);
-    RecastPlanResult res = planLocked(zone_name, start, goal, start_floor_y, goal_floor_y, goal_deck_y, start_deck_y, no_go_discs, should_stop);
+    RecastPlanResult res =
+        planLocked(zone_name, start, goal, start_floor_y, goal_floor_y, goal_deck_y, start_deck_y, no_go_discs, should_stop);
     // 规划完把空闲页还给系统。
 #if defined(__APPLE__)
     malloc_zone_pressure_relief(nullptr, 0);
