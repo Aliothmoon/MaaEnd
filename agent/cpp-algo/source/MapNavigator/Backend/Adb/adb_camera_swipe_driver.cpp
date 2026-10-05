@@ -33,7 +33,8 @@ cv::Point DragLeadPoint(const cv::Point& start, const cv::Point& end, int lead, 
     }
     const double scale = static_cast<double>(lead) / length;
     return ClampPoint(
-        { start.x + static_cast<int>(std::lround((end.x - start.x) * scale)), start.y + static_cast<int>(std::lround((end.y - start.y) * scale)) },
+        { start.x + static_cast<int>(std::lround((end.x - start.x) * scale)),
+          start.y + static_cast<int>(std::lround((end.y - start.y) * scale)) },
         resolution);
 }
 
