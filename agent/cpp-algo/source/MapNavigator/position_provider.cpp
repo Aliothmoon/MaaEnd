@@ -125,7 +125,7 @@ bool PositionProvider::Capture(
         return false;
     }
 
-    // An unsure camera reading is left out everywhere: as the heading source, and for steering while standing.
+    // An unsure camera reading is never the heading source, and on the touch backends never steered on either.
     const std::optional<double> confident_camera = locate_result.camRot && std::isfinite(locate_result.camRot->confidence)
                                                            && locate_result.camRot->confidence >= kNavigationCameraMinConfidence
                                                        ? std::optional<double>(locate_result.camRot->rot)
@@ -150,7 +150,9 @@ bool PositionProvider::Capture(
     out_pos->angle = *heading;
     out_pos->score = locate_result.position->score;
     out_pos->zone_id = locate_result.position->zoneId;
-    out_pos->camera_angle = confident_camera;
+    // Only the touch backends steer on the camera; the desktop backends keep passing the raw reading, as before.
+    out_pos->camera_angle =
+        uses_adb_minimap_roi_ ? confident_camera : (locate_result.camRot ? std::optional<double>(locate_result.camRot->rot) : std::nullopt);
     out_pos->valid = true;
     out_pos->timestamp = capture_started_at;
 

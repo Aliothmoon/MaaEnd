@@ -1435,6 +1435,10 @@ bool NavigationStateMachine::TickNavigate()
         runtime_state_.flow.navigate_started_at.time_since_epoch().count() > 0
         && std::chrono::duration_cast<std::chrono::milliseconds>(now - runtime_state_.flow.navigate_started_at).count() >= 3000;
     const double current_heading = NaviMath::NormalizeAngle(position_->angle);
+    // Everything added for a slow loop below (camera steering, the same-tick waypoint pass, pivots, corner braking and
+    // the tick-based pending lifetime) is kept to the touch backends: desktop input (Win32) is fast and settled, so it
+    // keeps the original behaviour until an issue there calls for any of it.
+    const bool drops_turn_sends = motion_controller_->SteeringDropsTurnSends();
     // A turn swings the camera at once, but the character arrow only follows once the character runs: standing, it does
     // not move at all, and just after forward is pressed it is still swinging round. Steering on the stale arrow reads
     // the turn as never landed and sends it again, far past the corner, so steer on the camera in both cases. Forward
@@ -1442,7 +1446,8 @@ bool NavigationStateMachine::TickNavigate()
     const bool arrow_lags_camera =
         position_->camera_angle.has_value()
         && std::abs(NaviMath::NormalizeAngle(*position_->camera_angle - position_->angle)) > kSteerArrowLagCameraDeg;
-    const bool steering_on_camera = arrow_lags_camera || (position_->camera_angle.has_value() && !motion_controller_->IsMovingForward());
+    const bool steering_on_camera =
+        drops_turn_sends && (arrow_lags_camera || (position_->camera_angle.has_value() && !motion_controller_->IsMovingForward()));
     const double steer_heading = steering_on_camera ? NaviMath::NormalizeAngle(*position_->camera_angle) : current_heading;
     const bool degraded_fix = position_provider_->LastCaptureWasBlackScreen() || !position_->valid;
     // Gap between the screencap this tick's fix came from and the decision below: the locate itself plus the work
@@ -1680,7 +1685,8 @@ bool NavigationStateMachine::TickNavigate()
                         0.0,
                         stalled_ms);
                 }
-                if (!waypoint.IsContinuousRun() || session_->phase() != NaviPhase::Navigate || !session_->HasCurrentWaypoint()) {
+                if (!drops_turn_sends || !waypoint.IsContinuousRun() || session_->phase() != NaviPhase::Navigate
+                    || !session_->HasCurrentWaypoint()) {
                     return true;
                 }
                 route = RouteTracker::Update(session_, &runtime_state_.route, *position_);
@@ -2022,7 +2028,7 @@ bool NavigationStateMachine::TickNavigate()
     // Unknown until the second steering tick of a navigation.
     const std::optional<int64_t> steer_period_ms =
         flow.steer_periods_ms.empty() ? std::nullopt : std::optional<int64_t>(latency::Median(flow.steer_periods_ms));
-    const bool slow_loop = steer_period_ms.has_value() && *steer_period_ms >= kSlowLoopPivotPeriodMs;
+    const bool slow_loop = drops_turn_sends && steer_period_ms.has_value() && *steer_period_ms >= kSlowLoopPivotPeriodMs;
     const double batch_cap_deg = motion_controller_->SteeringBatchCapDeg();
     const bool walk_engaged = walk_mode_.engaged();
     const auto pending_lifetime_ms = [&](double delta_deg) {
@@ -2030,11 +2036,12 @@ bool NavigationStateMachine::TickNavigate()
         // land, so add time for the part beyond the first batch. A debt written off mid-sweep makes the loop command
         // the remainder a second time, which overshoots by whatever was still in flight and then hunts back.
         const double extra_sweep_deg = std::max(0.0, std::abs(delta_deg) - batch_cap_deg);
-        const int64_t floor_ms = std::max(kSteeringPendingLifetimeMs, kSteeringPendingLifetimeTicks * steer_period_ms.value_or(0));
+        const int64_t floor_ms = drops_turn_sends
+                                     ? std::max(kSteeringPendingLifetimeMs, kSteeringPendingLifetimeTicks * steer_period_ms.value_or(0))
+                                     : kSteeringPendingLifetimeMs;
         const int64_t base_ms = floor_ms + static_cast<int64_t>(extra_sweep_deg / kYawRateDegPerSec * 1000.0);
         return walk_engaged ? base_ms * kWalkModeSlowFactor : base_ms;
     };
-    const bool drops_turn_sends = motion_controller_->SteeringDropsTurnSends();
     if (drops_turn_sends) {
         std::erase_if(steering_rate.in_flight, [&](const SteeringRateState::InFlightTurn& turn) {
             return std::chrono::duration_cast<std::chrono::milliseconds>(now - turn.sent_at).count() >= pending_lifetime_ms(turn.delta_deg);
@@ -2083,7 +2090,7 @@ bool NavigationStateMachine::TickNavigate()
     // Before the period is known the agent is just starting off, so only a turn nearly sideways or behind waits.
     const double turn_abs_deg = std::abs(steering.yaw_delta_deg);
     const bool pivot_in_place =
-        steering.issued
+        drops_turn_sends && steering.issued
         && (steer_period_ms.has_value() ? slow_loop && turn_abs_deg >= kSlowLoopPivotTurnDeg : turn_abs_deg >= kStartupPivotTurnDeg);
     // The pivot only starts once the aim has swung past the vertex, and at a narrow bend the aim is held on the vertex
     // until the agent is all but on it: on a slow loop that is a tick and more too late. Stop short instead, once per
