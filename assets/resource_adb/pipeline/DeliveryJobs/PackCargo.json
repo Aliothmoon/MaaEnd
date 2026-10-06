@@ -15,33 +15,12 @@
             408
         ]
     },
-    // 手机帧率低时点完填满，第一帧进度条可能还没涨到顶；没认出装满先等进度条停下再看一次
     "DeliveryJobsFillCorrespondingGoods": {
         "target_offset": [
             -90,
             0,
             0,
             0
-        ],
-        "next": [
-            "DeliveryJobsFillToMaxNextStep",
-            "DeliveryJobsRecheckCargoFilledAfterSettle"
-        ]
-    },
-    "DeliveryJobsRecheckCargoFilledAfterSettle": {
-        "desc": "等装箱进度条停下后再检查是否装满",
-        "post_wait_freezes": {
-            "time": 500,
-            "target": [
-                1194,
-                139,
-                86,
-                320
-            ]
-        },
-        "next": [
-            "DeliveryJobsFillToMaxNextStep",
-            "[Anchor]DeliveryJobsNextPriority"
         ]
     },
     "DeliveryJobsSelectedBidPriceOCR": {
