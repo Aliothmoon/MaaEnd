@@ -28,8 +28,8 @@
             1
         ],
         "contact": 4,
-        "post_delay": 0,
-        "auto_up": true
+        "auto_up": true,
+        "post_delay": 0
     },
     "__AutoFightActionAttackTouchUp": {
         "desc": "ADB 松开普攻",
@@ -248,8 +248,8 @@
             1
         ],
         "contact": 0,
-        "post_delay": 0,
-        "auto_up": true
+        "auto_up": true,
+        "post_delay": 0
     },
     "__AutoFightActionMoveForwardKeyUp": {
         "desc": "ADB 松开摇杆",
@@ -269,8 +269,8 @@
             1
         ],
         "contact": 0,
-        "post_delay": 0,
-        "auto_up": true
+        "auto_up": true,
+        "post_delay": 0
     },
     "__AutoFightActionMoveBackKeyUp": {
         "desc": "ADB 松开摇杆",
@@ -290,8 +290,8 @@
             1
         ],
         "contact": 0,
-        "post_delay": 0,
-        "auto_up": true
+        "auto_up": true,
+        "post_delay": 0
     },
     "__AutoFightActionMoveLeftKeyUp": {
         "desc": "ADB 松开摇杆",
@@ -311,8 +311,8 @@
             1
         ],
         "contact": 0,
-        "post_delay": 0,
-        "auto_up": true
+        "auto_up": true,
+        "post_delay": 0
     },
     "__AutoFightActionMoveRightKeyUp": {
         "desc": "ADB 松开摇杆",
