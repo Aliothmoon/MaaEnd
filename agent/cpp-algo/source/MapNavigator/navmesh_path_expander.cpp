@@ -856,10 +856,8 @@ bool AppendStartRecovery(
 // 末端(那时末端就是这个区间的目标), 除非它压根压在同一格上 —— 下索点即终点时那个补点正是
 // 这样, 此时没有可朝的方向。阈值取行走侧自己用的最小瞄准距离: 更近的点, 定位误差折算出来的
 // 方位就是噪声, 两者是同一个 atan(offset / reach)
-std::optional<ZiplineMountSpot> PickExitAimPoint(
-    const std::vector<Waypoint>& out_path,
-    size_t departure_index,
-    const ZiplineNodeRef& dismount)
+std::optional<ZiplineMountSpot>
+    PickExitAimPoint(const std::vector<Waypoint>& out_path, size_t departure_index, const ZiplineNodeRef& dismount)
 {
     std::optional<ZiplineMountSpot> farthest;
     double farthest_distance = 0.0;
