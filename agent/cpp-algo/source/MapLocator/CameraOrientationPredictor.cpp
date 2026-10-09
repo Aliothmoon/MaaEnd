@@ -350,9 +350,8 @@ std::optional<CameraOrientation>
     const double resultantLength = std::hypot(resultantSin, resultantCos);
     const double alignmentCos = std::cos(std::abs(decoded - resultantAngle) * (std::numbers::pi / 180.0));
     // 先验已在真实双峰间消歧时，置信度衡量所选峰内部的集中程度，避免另一峰把它抵消。
-    const double confidence = used_prior && window_mass > 0.0
-                                  ? std::clamp(std::hypot(windowSin, windowCos) / window_mass, 0.0, 1.0)
-                                  : std::clamp(resultantLength * alignmentCos, 0.0, 1.0);
+    const double confidence = used_prior && window_mass > 0.0 ? std::clamp(std::hypot(windowSin, windowCos) / window_mass, 0.0, 1.0)
+                                                              : std::clamp(resultantLength * alignmentCos, 0.0, 1.0);
     if (!used_prior && alignmentCos < 0.0) {
         LogWarn << "CameraOrientation: decoded direction diverges from resultant" << VAR(decoded) << VAR(resultantAngle);
     }
