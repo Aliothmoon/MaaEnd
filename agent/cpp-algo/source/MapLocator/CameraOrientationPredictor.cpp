@@ -35,22 +35,8 @@ constexpr float kSecondaryPeakRatio = 0.05f;
 const cv::Mat kUnavailableAsset(1, 1, CV_8UC4, cv::Scalar::all(0));
 } // namespace
 
-CameraOrientationPredictor::CameraOrientationPredictor(const std::string& preprocessModelPath, const std::string& refModelPath, int threads)
+CameraOrientationPredictor::CameraOrientationPredictor(const std::string& refModelPath, int threads)
 {
-    // 前处理由 BuildOrientationStrips 在 C++ 里执行，preprocess.onnx 只用来核对定义版本：
-    // 定义变了而 C++ 没跟上时，条带与分类器训练时的输入不再一致，宁可停用也不给错的朝向。
-    if (preprocessModelPath.empty()) {
-        LogError << "CameraOrientation: preprocess model path is empty; predictor disabled.";
-        return;
-    }
-    const auto definitionHash = ReadPreprocessDefinitionHash(MAA_NS::path(preprocessModelPath));
-    if (definitionHash != kPreprocessDefinitionHash) {
-        LogError << "CameraOrientation: preprocess definition mismatch; predictor disabled." << VAR(preprocessModelPath)
-                 << VAR(definitionHash.value_or("(none)")) << VAR(std::string(kPreprocessDefinitionHash));
-        return;
-    }
-    isPreprocessModelLoaded_ = true;
-
     try {
         ortEnv = std::make_unique<Ort::Env>(ORT_LOGGING_LEVEL_WARNING, "MapLocatorCameraOrientation");
     }
@@ -66,7 +52,7 @@ CameraOrientationPredictor::CameraOrientationPredictor(const std::string& prepro
     isRefModelLoaded_ = loadSession(refModelPath, "polar_with_ref", sessionOptions, &refSession);
 
     if (!isLoaded()) {
-        LogError << "CameraOrientation: predictor disabled" << VAR(isPreprocessModelLoaded_) << VAR(isRefModelLoaded_);
+        LogError << "CameraOrientation: predictor disabled" << VAR(isRefModelLoaded_);
         ortEnv.reset();
     }
 }

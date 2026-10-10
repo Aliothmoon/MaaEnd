@@ -68,6 +68,16 @@ if(NOT MSVC)
     set_source_files_properties(MapLocator/CameraOrientationPreprocess.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
 endif()
 
+# preprocess.onnx 只在构建期核对定义版本，见 cmake/CameraOrientation.cmake；两个文件变了都会重新配置。
+include(${PROJECT_SOURCE_DIR}/cmake/CameraOrientation.cmake)
+set(camera_orientation_header "${CMAKE_CURRENT_SOURCE_DIR}/MapLocator/CameraOrientationPreprocess.h")
+set(camera_orientation_onnx "${PROJECT_SOURCE_DIR}/../../assets/resource/model/map/cameraorientation/preprocess.onnx")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${camera_orientation_header}")
+if(EXISTS "${camera_orientation_onnx}")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${camera_orientation_onnx}")
+endif()
+maaend_check_camera_orientation_definition("${camera_orientation_header}" "${camera_orientation_onnx}")
+
 target_include_directories(cpp-algo
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${MAA_PRIVATE_INC} ${MAA_PUBLIC_INC})
 

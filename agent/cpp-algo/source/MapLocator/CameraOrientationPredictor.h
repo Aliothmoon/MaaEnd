@@ -16,12 +16,12 @@
 namespace maplocator
 {
 
-// 摄像机朝向推理：消费交付工件 map/cameraorientation/{preprocess,polar_with_ref}.onnx。
+// 摄像机朝向推理：交付工件 map/cameraorientation/{preprocess,polar_with_ref}.onnx。
 //
 // preprocess.onnx 定义前处理（极坐标几何、参考采样与条带域合成、采样与取整约定）：
 // 输入观测 ROI + zone 底图资产 + 定位 (x, y, scale)，输出观测条带与参考条带。图里没有
-// 可学习参数，运行时由 BuildOrientationStrips 的 C++ 等价实现执行，不再经 onnxruntime；
-// 图文件只用来核对 definition_hash，与 C++ 实现的版本不一致时预测器停用。
+// 可学习参数，由 BuildOrientationStrips 的 C++ 等价实现执行，运行时不加载；它与 C++ 的
+// 定义版本（definition_hash）在构建期核对，见 cmake/CameraOrientation.cmake。
 // 参考 BGR 在资产透明处按白底合成，alpha 保留资产原始值；资产透明与裁剪越界同属
 // 「参考缺失」，由 ref.A（0 = 缺失）表达。polar_with_ref.onnx 消费 7 通道
 // [obs.BGR, ref.BGR, ref.A] 参考配对，输出 360 bin 方位角概率分布。
@@ -36,7 +36,7 @@ namespace maplocator
 class CameraOrientationPredictor
 {
 public:
-    explicit CameraOrientationPredictor(const std::string& preprocessModelPath, const std::string& refModelPath, int threads = 2);
+    explicit CameraOrientationPredictor(const std::string& refModelPath, int threads = 2);
     ~CameraOrientationPredictor() = default;
 
     // 输入 minimap 应为 TryExtractMinimap 产物（720p 基准下 118x120 的小地图）。
@@ -54,8 +54,8 @@ public:
         const std::string& zoneId,
         std::optional<double> camera_heading_prior = std::nullopt);
 
-    // 前处理图与参考配对分类器同时可用才允许推理。
-    bool isLoaded() const { return isPreprocessModelLoaded_ && isRefModelLoaded_; }
+    // 参考配对分类器可用才允许推理。
+    bool isLoaded() const { return isRefModelLoaded_; }
 
 private:
     std::optional<CameraOrientation> infer(
@@ -77,7 +77,6 @@ private:
     std::unique_ptr<Ort::Env> ortEnv;
     std::unique_ptr<Ort::Session> refSession;
 
-    bool isPreprocessModelLoaded_ = false;
     bool isRefModelLoaded_ = false;
     // Ort::Session::Run 线程安全，但预测共用的条带与拼接 scratch 不是；防多帧 locate 并发。
     std::mutex predictMutex;
