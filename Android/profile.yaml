@@ -18,6 +18,8 @@ exclude:
   - resource/model/detect/ProtocolSpace/**
   # 没有任何 agent / pipeline 读取
   - data/ZmdMap/**
+  # 摄像机朝向前处理由 cpp-algo 的 C++ 实现执行，这张图只在 cpp-algo 构建期核对 definition_hash
+  - resource/model/map/cameraorientation/preprocess.onnx
 
 # 出 agent（仓库根）：
 #   uv run tools/build_android_agents.py

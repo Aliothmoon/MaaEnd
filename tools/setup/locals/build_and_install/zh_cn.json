@@ -62,6 +62,7 @@
     "maadeps_download_failed": "MaaDeps 下载失败",
     "maadeps_download_complete": "MaaDeps 依赖下载完成",
     "docs_copy_failed": "复制/链接 docs/img 目录失败",
+    "build_only_asset_removed": "剔除仅构建期使用的资源: {path}",
     "separator": "=========================",
     "install_complete": "安装目录准备完成！",
     "maafw_download_hint": "为了使用 MaaFramework，您还需要：",
