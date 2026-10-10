@@ -35,6 +35,15 @@ const cv::Mat kUnavailableAsset(1, 1, CV_8UC4, cv::Scalar::all(0));
 
 CameraOrientationPredictor::CameraOrientationPredictor(const std::string& refModelPath, int threads)
 {
+    // 后端随打包的模型走：有 ncnn 版就只用 ncnn，缺文件或加载失败即停用，不回退 onnxruntime。
+    if (const auto ncnnFiles = FindNcnnModel(MAA_NS::path(refModelPath))) {
+        ncnnModel = NcnnModel::Load(*ncnnFiles, threads, "polar_with_ref");
+        if (!ncnnModel) {
+            LogError << "CameraOrientation: ncnn model failed to load; predictor disabled";
+        }
+        return;
+    }
+
     try {
         ortEnv = std::make_unique<Ort::Env>(ORT_LOGGING_LEVEL_WARNING, "MapLocatorCameraOrientation");
     }
@@ -126,8 +135,6 @@ std::optional<CameraOrientation> CameraOrientationPredictor::infer(
     }
 
     try {
-        auto memoryInfo = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-
         const std::uint8_t* referenceData = stripScratch.reference.ptr<std::uint8_t>();
         const size_t stripPixels = stripScratch.reference.total();
 
@@ -150,6 +157,23 @@ std::optional<CameraOrientation> CameraOrientationPredictor::infer(
         std::uint8_t* classifierData = refInputScratch.ptr<std::uint8_t>();
         const int classifierChannels = 7;
 
+        if (ncnnModel) {
+            // ncnn 版输入是 float NCHW、取值 0~255（/255 已折进首层卷积），与 ORT 版的 uint8 NHWC 只差排布。
+            constexpr size_t kPlane = static_cast<size_t>(kOrientationStripHeight) * kOrientationStripWidth;
+            chwScratch.resize(kPlane * classifierChannels);
+            for (size_t i = 0; i < kPlane; ++i) {
+                for (int c = 0; c < classifierChannels; ++c) {
+                    chwScratch[static_cast<size_t>(c) * kPlane + i] = static_cast<float>(classifierData[i * classifierChannels + c]);
+                }
+            }
+            if (!ncnnModel->Run(chwScratch.data(), classifierChannels, kOrientationStripHeight, kOrientationStripWidth, outputScratch)) {
+                LogError << "CameraOrientation: ncnn inference failed" << VAR(zoneId);
+                return std::nullopt;
+            }
+            return decodePmf(outputScratch.data(), outputScratch.size(), camera_heading_prior);
+        }
+
+        auto memoryInfo = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
         const std::array<int64_t, 4> classifierShape { 1, kOrientationStripHeight, kOrientationStripWidth, classifierChannels };
         Ort::Value classifierInput = Ort::Value::CreateTensor<std::uint8_t>(
             memoryInfo,

@@ -69,6 +69,21 @@ target_link_libraries(cpp-algo
     PRIVATE icon-recognition-core grid-tracker MaaUtils MaaAgentServer::MaaAgentServer
     PRIVATE Boost::system ${OpenCV_LIBS} ONNXRuntime::ONNXRuntime ZLIB::ZLIB)
 
+# 地图模型的 ncnn 后端（MapLocator/NcnnModel）：只在 Android 上编入，libncnn.so 由 MaaDeps 提供，
+# 与 MaaFramework 共用同一份。模型目录里有 <stem>.ncnn.{param,bin} 时该模型只走 ncnn。
+option(MAAEND_WITH_NCNN "build the ncnn backend for map models" ${ANDROID})
+if(MAAEND_WITH_NCNN)
+    find_package(ncnn CONFIG REQUIRED)
+    # 顶层把所有配置都映射到 RelWithDebInfo，而 MaaDeps 只导出了 ncnn 的 Release 配置，这里改映射到 Release。
+    set_target_properties(ncnn PROPERTIES
+        MAP_IMPORTED_CONFIG_DEBUG Release
+        MAP_IMPORTED_CONFIG_RELEASE Release
+        MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release
+        MAP_IMPORTED_CONFIG_MINSIZEREL Release)
+    target_link_libraries(cpp-algo PRIVATE ncnn)
+    target_compile_definitions(cpp-algo PRIVATE MAAEND_WITH_NCNN)
+endif()
+
 if(LINUX)
     target_link_libraries(cpp-algo PRIVATE pthread dl)
 endif()

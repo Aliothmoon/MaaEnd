@@ -5,6 +5,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include <onnxruntime/onnxruntime_cxx_api.h>
 
@@ -12,6 +13,7 @@
 
 #include "CameraOrientationPreprocess.h"
 #include "MapTypes.h"
+#include "NcnnModel.h"
 
 namespace maplocator
 {
@@ -54,7 +56,7 @@ public:
         std::optional<double> camera_heading_prior = std::nullopt);
 
     // 参考配对分类器可用才允许推理。
-    bool isLoaded() const { return refSession != nullptr; }
+    bool isLoaded() const { return refSession != nullptr || ncnnModel != nullptr; }
 
 private:
     std::optional<CameraOrientation> infer(
@@ -75,11 +77,15 @@ private:
 
     std::unique_ptr<Ort::Env> ortEnv;
     std::unique_ptr<Ort::Session> refSession;
+    // 模型目录里有 polar_with_ref.ncnn.{param,bin} 时只用 ncnn（float NCHW 0~255 输入），不建 onnxruntime session。
+    std::unique_ptr<NcnnModel> ncnnModel;
 
     // Ort::Session::Run 线程安全，但预测共用的条带与拼接 scratch 不是；防多帧 locate 并发。
     std::mutex predictMutex;
     OrientationStrips stripScratch;
-    cv::Mat refInputScratch; // 7 通道 NHWC 拼接输入
+    cv::Mat refInputScratch;          // 7 通道 NHWC 拼接输入
+    std::vector<float> chwScratch;    // ncnn：7 通道 float CHW 输入
+    std::vector<float> outputScratch; // ncnn：pmf
 };
 
 } // namespace maplocator

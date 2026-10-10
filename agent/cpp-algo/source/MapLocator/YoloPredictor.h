@@ -10,6 +10,7 @@
 #include <MaaUtils/NoWarningCV.hpp>
 
 #include "MapTypes.h"
+#include "NcnnModel.h"
 
 namespace maplocator
 {
@@ -44,6 +45,9 @@ private:
 
     std::unique_ptr<Ort::Env> ortEnv;
     std::unique_ptr<Ort::Session> ortSession;
+    // 模型目录里有 cls.ncnn.{param,bin} 时只用 ncnn，不建 onnxruntime session。
+    std::unique_ptr<NcnnModel> ncnnModel;
+    std::vector<float> outputScratch;
     std::vector<std::string> inputNodeNames;
     std::vector<std::string> outputNodeNames;
 
