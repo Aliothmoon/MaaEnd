@@ -62,21 +62,11 @@ list(REMOVE_ITEM cpp_algo_src ${icon_recognition_core_src} ${recogrid_src} ${gri
 
 add_executable(cpp-algo ${cpp_algo_src} ${cpp_algo_header})
 
-# 摄像机朝向前处理要与 preprocess.onnx 的定义逐字节一致，依赖 float32 逐步舍入，不能收缩成 FMA。
+# 摄像机朝向预处理要与定义（minimap-camera-orientation 的 endfield/preprocess.py）逐字节一致，依赖 float32 逐步舍入，不能收缩成 FMA。
 # MSVC 默认 /fp:precise 不做收缩；clang / gcc 默认会，这里单独关掉。
 if(NOT MSVC)
     set_source_files_properties(MapLocator/CameraOrientationPreprocess.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
 endif()
-
-# preprocess.onnx 只在构建期核对定义版本，见 cmake/CameraOrientation.cmake；两个文件变了都会重新配置。
-include(${PROJECT_SOURCE_DIR}/cmake/CameraOrientation.cmake)
-set(camera_orientation_header "${CMAKE_CURRENT_SOURCE_DIR}/MapLocator/CameraOrientationPreprocess.h")
-set(camera_orientation_onnx "${PROJECT_SOURCE_DIR}/../../assets/resource/model/map/cameraorientation/preprocess.onnx")
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${camera_orientation_header}")
-if(EXISTS "${camera_orientation_onnx}")
-    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${camera_orientation_onnx}")
-endif()
-maaend_check_camera_orientation_definition("${camera_orientation_header}" "${camera_orientation_onnx}")
 
 target_include_directories(cpp-algo
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${MAA_PRIVATE_INC} ${MAA_PUBLIC_INC})

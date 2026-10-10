@@ -114,7 +114,7 @@ std::optional<CameraOrientation> CameraOrientationPredictor::infer(
         return std::nullopt;
     }
 
-    // 前处理输入契约是 BGR HWC uint8；BGRA 先转 3 通道（机械类型转换）。
+    // 预处理输入契约是 BGR HWC uint8；BGRA 先转 3 通道（机械类型转换）。
     cv::Mat minimapBgr = minimap;
     cv::Mat converted;
     if (minimapBgr.channels() == 4) {
@@ -122,7 +122,7 @@ std::optional<CameraOrientation> CameraOrientationPredictor::infer(
         minimapBgr = converted;
     }
 
-    // 几何、参考采样与合成、取整约定与 preprocess.onnx 逐字节一致（见 CameraOrientationPreprocess.h）。
+    // 几何、参考采样与合成、取整约定与预处理定义逐字节一致（见 CameraOrientationPreprocess.h）。
     if (!BuildOrientationStrips(minimapBgr, asset, static_cast<float>(x), static_cast<float>(y), static_cast<float>(scale), stripScratch)) {
         LogError << "CameraOrientation: invalid preprocess input" << VAR(minimapBgr.cols) << VAR(minimapBgr.rows) << VAR(asset.cols)
                  << VAR(asset.rows) << VAR(x) << VAR(y) << VAR(scale);

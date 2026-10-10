@@ -62,7 +62,6 @@
     "maadeps_download_failed": "MaaDeps download failed",
     "maadeps_download_complete": "MaaDeps dependencies downloaded successfully",
     "docs_copy_failed": "Failed to copy/link docs/img directory",
-    "build_only_asset_removed": "Removed build-only asset: {path}",
     "separator": "=========================",
     "install_complete": "Install directory prepared successfully!",
     "maafw_download_hint": "To use MaaFramework, you also need to:",

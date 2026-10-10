@@ -16,12 +16,11 @@
 namespace maplocator
 {
 
-// 摄像机朝向推理：交付工件 map/cameraorientation/{preprocess,polar_with_ref}.onnx。
+// 摄像机朝向推理：预处理 + 交付工件 map/cameraorientation/polar_with_ref.onnx。
 //
-// preprocess.onnx 定义前处理（极坐标几何、参考采样与条带域合成、采样与取整约定）：
-// 输入观测 ROI + zone 底图资产 + 定位 (x, y, scale)，输出观测条带与参考条带。图里没有
-// 可学习参数，由 BuildOrientationStrips 的 C++ 等价实现执行，运行时不加载；它与 C++ 的
-// 定义版本（definition_hash）在构建期核对，见 cmake/CameraOrientation.cmake。
+// 预处理（极坐标几何、参考采样与条带域合成、采样与取整约定）由 BuildOrientationStrips
+// 执行，它是 minimap-camera-orientation 预处理定义的 C++ 等价实现：输入观测 ROI + zone
+// 底图资产 + 定位 (x, y, scale)，输出观测条带与参考条带。
 // 参考 BGR 在资产透明处按白底合成，alpha 保留资产原始值；资产透明与裁剪越界同属
 // 「参考缺失」，由 ref.A（0 = 缺失）表达。polar_with_ref.onnx 消费 7 通道
 // [obs.BGR, ref.BGR, ref.A] 参考配对，输出 360 bin 方位角概率分布。

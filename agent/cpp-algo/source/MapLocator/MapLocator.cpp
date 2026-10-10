@@ -860,7 +860,7 @@ bool MapLocator::Impl::initialize(const MapLocatorConfig& cfg)
         zoneClassifier = std::make_unique<YoloPredictor>(config.yoloModelPath, matchCfg.yoloConfThreshold, config.yoloThreads);
     }
 
-    // 摄像机朝向：前处理在 C++ 里执行，参考配对分类器的推理是本阶段的主要开销，故用 2 个
+    // 摄像机朝向：预处理在 C++ 里执行，参考配对分类器的推理是本阶段的主要开销，故用 2 个
     // intra-op 线程并行，缩短同步帧追加的定位延迟。
     if (!config.cameraOrientationRefModelPath.empty()) {
         orientationPredictor = std::make_unique<CameraOrientationPredictor>(config.cameraOrientationRefModelPath, 2);

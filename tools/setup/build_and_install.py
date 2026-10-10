@@ -12,13 +12,6 @@ from .path_utils import remove_directory_or_link
 
 LOCALS_DIR = Path(__file__).parent / "locals" / "build_and_install"
 
-# 只在构建期使用、不进发布包的资源（相对 assets/）。只在 CI 复制模式下从 install/ 剔除：
-# 开发模式下 install/ 里是指向 assets/ 的链接，删了就是删源文件。
-BUILD_ONLY_ASSETS = (
-    # 摄像机朝向前处理由 cpp-algo 的 C++ 实现执行，这张图只在 cpp-algo 构建期核对 definition_hash
-    "resource/model/map/cameraorientation/preprocess.onnx",
-)
-
 
 _local_t = lambda key, **kwargs: key.format(**kwargs) if kwargs else key
 
@@ -844,14 +837,6 @@ def main() -> None:
         elif item.is_file():
             if link_or_copy_file(item, dst):
                 print(f"  {Console.ok('->')} {dst}")
-    if use_copy:
-        for rel in BUILD_ONLY_ASSETS:
-            build_only = install_dir / rel
-            if build_only.is_file():
-                build_only.unlink()
-                print(
-                    f"  {Console.ok('-')} {t('build_only_asset_removed', path=build_only)}"
-                )
 
     docs_img_dir = root_dir / "docs" / "img"
     if docs_img_dir.is_dir():
