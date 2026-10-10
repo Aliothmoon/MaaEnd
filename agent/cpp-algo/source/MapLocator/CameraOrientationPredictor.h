@@ -10,6 +10,7 @@
 
 #include <MaaUtils/NoWarningCV.hpp>
 
+#include "CameraOrientationPreprocess.h"
 #include "MapTypes.h"
 
 namespace maplocator
@@ -17,10 +18,12 @@ namespace maplocator
 
 // 摄像机朝向推理：消费交付工件 map/cameraorientation/{preprocess,polar_with_ref}.onnx。
 //
-// preprocess.onnx 承载前处理的唯一实现（极坐标几何、参考采样与条带域合成、采样与
-// 取整约定）：输入观测 ROI + zone 底图资产 + 定位 (x, y, scale)，输出观测条带与参考
-// 条带。参考 BGR 在资产透明处按白底合成，alpha 保留资产原始值；资产透明与裁剪越界
-// 同属「参考缺失」，由 ref.A（0 = 缺失）表达。polar_with_ref.onnx 消费 7 通道
+// preprocess.onnx 定义前处理（极坐标几何、参考采样与条带域合成、采样与取整约定）：
+// 输入观测 ROI + zone 底图资产 + 定位 (x, y, scale)，输出观测条带与参考条带。图里没有
+// 可学习参数，运行时由 BuildOrientationStrips 的 C++ 等价实现执行，不再经 onnxruntime；
+// 图文件只用来核对 definition_hash，与 C++ 实现的版本不一致时预测器停用。
+// 参考 BGR 在资产透明处按白底合成，alpha 保留资产原始值；资产透明与裁剪越界同属
+// 「参考缺失」，由 ref.A（0 = 缺失）表达。polar_with_ref.onnx 消费 7 通道
 // [obs.BGR, ref.BGR, ref.A] 参考配对，输出 360 bin 方位角概率分布。
 //
 // 参考缺失已在配对里表达、由模型自行处理，故这里不选路也不回退：底图资产缺失或非
@@ -72,13 +75,13 @@ private:
     std::optional<CameraOrientation> decodePmf(const float* pmf, size_t count, std::optional<double> camera_heading_prior) const;
 
     std::unique_ptr<Ort::Env> ortEnv;
-    std::unique_ptr<Ort::Session> preprocessSession;
     std::unique_ptr<Ort::Session> refSession;
 
     bool isPreprocessModelLoaded_ = false;
     bool isRefModelLoaded_ = false;
-    // Ort::Session::Run 线程安全，但预测共用的拼接 scratch 不是；防多帧 locate 并发。
+    // Ort::Session::Run 线程安全，但预测共用的条带与拼接 scratch 不是；防多帧 locate 并发。
     std::mutex predictMutex;
+    OrientationStrips stripScratch;
     cv::Mat refInputScratch; // 7 通道 NHWC 拼接输入
 };
 
