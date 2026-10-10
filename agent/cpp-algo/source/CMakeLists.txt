@@ -62,12 +62,6 @@ list(REMOVE_ITEM cpp_algo_src ${icon_recognition_core_src} ${recogrid_src} ${gri
 
 add_executable(cpp-algo ${cpp_algo_src} ${cpp_algo_header})
 
-# 摄像机朝向预处理要与定义（minimap-camera-orientation 的 endfield/preprocess.py）逐字节一致，依赖 float32 逐步舍入，不能收缩成 FMA。
-# MSVC 默认 /fp:precise 不做收缩；clang / gcc 默认会，这里单独关掉。
-if(NOT MSVC)
-    set_source_files_properties(MapLocator/CameraOrientationPreprocess.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
-endif()
-
 target_include_directories(cpp-algo
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${MAA_PRIVATE_INC} ${MAA_PUBLIC_INC})
 

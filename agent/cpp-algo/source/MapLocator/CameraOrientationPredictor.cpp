@@ -11,8 +11,6 @@
 #include <MaaUtils/Logger.h>
 #include <MaaUtils/Platform.h>
 
-#include "CameraOrientationPreprocess.h"
-
 namespace maplocator
 {
 
@@ -49,10 +47,8 @@ CameraOrientationPredictor::CameraOrientationPredictor(const std::string& refMod
     sessionOptions.SetIntraOpNumThreads(std::max(1, threads));
     sessionOptions.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
 
-    isRefModelLoaded_ = loadSession(refModelPath, "polar_with_ref", sessionOptions, &refSession);
-
-    if (!isLoaded()) {
-        LogError << "CameraOrientation: predictor disabled" << VAR(isRefModelLoaded_);
+    if (!loadSession(refModelPath, "polar_with_ref", sessionOptions, &refSession)) {
+        LogError << "CameraOrientation: predictor disabled";
         ortEnv.reset();
     }
 }
@@ -89,7 +85,7 @@ std::optional<CameraOrientation> CameraOrientationPredictor::predict(
     const std::string& zoneId,
     std::optional<double> camera_heading_prior)
 {
-    const bool assetUsable = !referenceAsset.empty() && referenceAsset.channels() == 4 && referenceAsset.isContinuous();
+    const bool assetUsable = !referenceAsset.empty() && referenceAsset.type() == CV_8UC4;
     const cv::Mat& asset = assetUsable ? referenceAsset : kUnavailableAsset;
     return infer(minimap, asset, x, y, scale, zoneId, camera_heading_prior);
 }
@@ -109,7 +105,7 @@ std::optional<CameraOrientation> CameraOrientationPredictor::infer(
         LogError << "CameraOrientation Error: Model is NOT loaded.";
         return std::nullopt;
     }
-    if (minimap.empty() || !minimap.isContinuous() || (minimap.channels() != 3 && minimap.channels() != 4)) {
+    if (minimap.empty() || (minimap.channels() != 3 && minimap.channels() != 4)) {
         LogError << "CameraOrientation Error: invalid minimap input" << VAR(minimap.cols) << VAR(minimap.rows) << VAR(minimap.channels());
         return std::nullopt;
     }
@@ -133,9 +129,7 @@ std::optional<CameraOrientation> CameraOrientationPredictor::infer(
         auto memoryInfo = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
 
         const std::uint8_t* referenceData = stripScratch.reference.ptr<std::uint8_t>();
-        const int64_t stripHeight = kOrientationStripHeight;
-        const int64_t stripWidth = kOrientationStripWidth;
-        const size_t stripPixels = static_cast<size_t>(stripHeight * stripWidth);
+        const size_t stripPixels = stripScratch.reference.total();
 
         // 缺口占比：参考条带 alpha（第 4 通道）< 255 的像素占比，仅作诊断日志。
         int64_t gapPixels = 0;
@@ -148,7 +142,7 @@ std::optional<CameraOrientation> CameraOrientationPredictor::infer(
         LogInfo << "CameraOrientation ref:" << VAR(zoneId) << VAR(x) << VAR(y) << VAR(scale) << VAR(gapFraction);
 
         // 分类器输入固定为 7 通道参考配对 [obs.BGR, ref.BGR, ref.A]。
-        refInputScratch.create(static_cast<int>(stripHeight), static_cast<int>(stripWidth), CV_MAKETYPE(CV_8U, 7));
+        refInputScratch.create(kOrientationStripHeight, kOrientationStripWidth, CV_MAKETYPE(CV_8U, 7));
         const cv::Mat sources[] = { stripScratch.observed, stripScratch.reference };
         // 源通道跨矩阵连续编号：[0,3) 观测 BGR、[3,7) 参考 BGR + alpha，因此恒等映射。
         const int fromTo[] = { 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6 };
@@ -156,13 +150,7 @@ std::optional<CameraOrientation> CameraOrientationPredictor::infer(
         std::uint8_t* classifierData = refInputScratch.ptr<std::uint8_t>();
         const int classifierChannels = 7;
 
-        Ort::Session* classifierSession = refSession.get();
-        if (!classifierSession) {
-            LogError << "CameraOrientation: reference classifier unavailable" << VAR(zoneId);
-            return std::nullopt;
-        }
-
-        const std::array<int64_t, 4> classifierShape { 1, stripHeight, stripWidth, classifierChannels };
+        const std::array<int64_t, 4> classifierShape { 1, kOrientationStripHeight, kOrientationStripWidth, classifierChannels };
         Ort::Value classifierInput = Ort::Value::CreateTensor<std::uint8_t>(
             memoryInfo,
             classifierData,
@@ -172,7 +160,7 @@ std::optional<CameraOrientation> CameraOrientationPredictor::infer(
         const char* classifierInputNames[] = { kClassifierInputName };
         const char* classifierOutputNames[] = { kClassifierOutputName };
         auto outputTensors =
-            classifierSession->Run(Ort::RunOptions { nullptr }, classifierInputNames, &classifierInput, 1, classifierOutputNames, 1);
+            refSession->Run(Ort::RunOptions { nullptr }, classifierInputNames, &classifierInput, 1, classifierOutputNames, 1);
         if (outputTensors.empty()) {
             LogError << "CameraOrientation: empty inference output.";
             return std::nullopt;

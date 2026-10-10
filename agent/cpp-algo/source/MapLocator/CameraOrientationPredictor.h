@@ -54,7 +54,7 @@ public:
         std::optional<double> camera_heading_prior = std::nullopt);
 
     // 参考配对分类器可用才允许推理。
-    bool isLoaded() const { return isRefModelLoaded_; }
+    bool isLoaded() const { return refSession != nullptr; }
 
 private:
     std::optional<CameraOrientation> infer(
@@ -76,7 +76,6 @@ private:
     std::unique_ptr<Ort::Env> ortEnv;
     std::unique_ptr<Ort::Session> refSession;
 
-    bool isRefModelLoaded_ = false;
     // Ort::Session::Run 线程安全，但预测共用的条带与拼接 scratch 不是；防多帧 locate 并发。
     std::mutex predictMutex;
     OrientationStrips stripScratch;
