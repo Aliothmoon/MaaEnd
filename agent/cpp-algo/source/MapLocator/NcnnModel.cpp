@@ -1,34 +1,20 @@
 #include "NcnnModel.h"
 
+#ifdef MAAEND_WITH_NCNN
+
 #include <algorithm>
+#include <cmath>
 #include <cstring>
+#include <limits>
 #include <string>
-#include <system_error>
-#include <tuple>
+
+#include <ncnn/net.h>
 
 #include <MaaUtils/Logger.h>
 #include <MaaUtils/Platform.h>
 
-#ifdef MAAEND_WITH_NCNN
-#include <ncnn/net.h>
-#endif
-
 namespace maplocator
 {
-
-std::optional<NcnnModelFiles> FindNcnnModel(const std::filesystem::path& onnx_path)
-{
-    NcnnModelFiles files { .param = onnx_path, .bin = onnx_path };
-    files.param.replace_extension(".ncnn.param");
-    files.bin.replace_extension(".ncnn.bin");
-    std::error_code ec;
-    if (!std::filesystem::exists(files.param, ec) && !std::filesystem::exists(files.bin, ec)) {
-        return std::nullopt;
-    }
-    return files;
-}
-
-#ifdef MAAEND_WITH_NCNN
 
 struct NcnnModel::Impl
 {
@@ -44,15 +30,12 @@ NcnnModel::NcnnModel()
 
 NcnnModel::~NcnnModel() = default;
 
-bool NcnnModel::IsAvailable()
+std::unique_ptr<NcnnModel> NcnnModel::load(const std::filesystem::path& param_path, int threads, const char* tag)
 {
-    return true;
-}
-
-std::unique_ptr<NcnnModel> NcnnModel::Load(const NcnnModelFiles& files, int threads, const char* tag)
-{
-    const std::string param = MAA_NS::path_to_utf8_string(files.param);
-    const std::string bin = MAA_NS::path_to_utf8_string(files.bin);
+    auto bin_path = param_path;
+    bin_path.replace_extension(".bin");
+    const std::string param = MAA_NS::path_to_utf8_string(param_path);
+    const std::string bin = MAA_NS::path_to_utf8_string(bin_path);
 
     std::unique_ptr<NcnnModel> model(new NcnnModel());
     ncnn::Option& opt = model->impl_->net.opt;
@@ -82,10 +65,22 @@ std::unique_ptr<NcnnModel> NcnnModel::Load(const NcnnModelFiles& files, int thre
     return model;
 }
 
-bool NcnnModel::Run(const float* chw, int channels, int height, int width, std::vector<float>& out)
+bool NcnnModel::run(const float* chw, int channels, int height, int width, size_t expected_output_size, std::vector<float>& out) const
 {
+    out.clear();
+    if (chw == nullptr || channels <= 0 || height <= 0 || width <= 0 || expected_output_size == 0
+        || expected_output_size > static_cast<size_t>(std::numeric_limits<int>::max())) {
+        LogError << "ncnn inference input or output contract is invalid" << VAR(channels) << VAR(height) << VAR(width)
+                 << VAR(expected_output_size);
+        return false;
+    }
+
     // ncnn::Mat 的通道按 cstep 对齐，逐通道拷贝而不是直接包装外部内存。
     ncnn::Mat input(width, height, channels);
+    if (input.empty()) {
+        LogError << "ncnn input allocation failed";
+        return false;
+    }
     const size_t plane = static_cast<size_t>(width) * static_cast<size_t>(height);
     for (int c = 0; c < channels; ++c) {
         std::memcpy(input.channel(c), chw + static_cast<size_t>(c) * plane, plane * sizeof(float));
@@ -93,52 +88,36 @@ bool NcnnModel::Run(const float* chw, int channels, int height, int width, std::
 
     ncnn::Extractor extractor = impl_->net.create_extractor();
     if (extractor.input(impl_->input_name.c_str(), input) != 0) {
+        LogError << "ncnn failed to set input";
         return false;
     }
     ncnn::Mat output;
+    // 默认 type=0 会解包并转回 float32；在语义解码之前仍校验实际表示与单样本向量形状。
     if (extractor.extract(impl_->output_name.c_str(), output) != 0 || output.empty()) {
+        LogError << "ncnn failed to extract output";
+        return false;
+    }
+    if (output.elempack != 1 || output.elemsize != sizeof(float) || output.w != static_cast<int>(expected_output_size) || output.h != 1
+        || output.d != 1 || output.c != 1) {
+        LogError << "ncnn output does not match the classification vector contract" << VAR(expected_output_size) << VAR(output.w)
+                 << VAR(output.h) << VAR(output.d) << VAR(output.c) << VAR(output.elempack) << VAR(output.elemsize);
         return false;
     }
 
-    const ncnn::Mat flat = output.reshape(output.w * output.h * output.d * output.c);
+    const ncnn::Mat flat = output.reshape(static_cast<int>(expected_output_size));
+    if (flat.empty()) {
+        LogError << "ncnn output reshape failed";
+        return false;
+    }
     const float* data = flat;
-    out.assign(data, data + flat.w);
+    if (std::any_of(data, data + expected_output_size, [](float value) { return !std::isfinite(value) || value < 0.0f; })) {
+        LogError << "ncnn classification output contains invalid probabilities";
+        return false;
+    }
+    out.assign(data, data + expected_output_size);
     return true;
 }
 
-#else
-
-struct NcnnModel::Impl
-{
-};
-
-NcnnModel::NcnnModel() = default;
-
-NcnnModel::~NcnnModel() = default;
-
-bool NcnnModel::IsAvailable()
-{
-    return false;
-}
-
-std::unique_ptr<NcnnModel> NcnnModel::Load(const NcnnModelFiles& files, int threads, const char* tag)
-{
-    std::ignore = files;
-    std::ignore = threads;
-    LogError << "cpp-algo built without ncnn" << VAR(tag);
-    return nullptr;
-}
-
-bool NcnnModel::Run(const float* chw, int channels, int height, int width, std::vector<float>& out)
-{
-    std::ignore = chw;
-    std::ignore = channels;
-    std::ignore = height;
-    std::ignore = width;
-    out.clear();
-    return false;
-}
+} // namespace maplocator
 
 #endif
-
-} // namespace maplocator

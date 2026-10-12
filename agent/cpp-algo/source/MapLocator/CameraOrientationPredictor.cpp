@@ -16,9 +16,11 @@ namespace maplocator
 
 namespace
 {
+#ifndef MAAEND_WITH_NCNN
 // 交付工件定死的输入/输出名；改动即契约变更。
 constexpr const char* kClassifierInputName = "strip";
 constexpr const char* kClassifierOutputName = "pmf";
+#endif
 
 // PMF 解码的定峰窗口半径（bin）：argmax 后在该窗口内按概率加权求圆均值。
 constexpr int kRefineRadius = 5;
@@ -35,15 +37,12 @@ const cv::Mat kUnavailableAsset(1, 1, CV_8UC4, cv::Scalar::all(0));
 
 CameraOrientationPredictor::CameraOrientationPredictor(const std::string& refModelPath, int threads)
 {
-    // 后端随打包的模型走：有 ncnn 版就只用 ncnn，缺文件或加载失败即停用，不回退 onnxruntime。
-    if (const auto ncnnFiles = FindNcnnModel(MAA_NS::path(refModelPath))) {
-        ncnnModel = NcnnModel::Load(*ncnnFiles, threads, "polar_with_ref");
-        if (!ncnnModel) {
-            LogError << "CameraOrientation: ncnn model failed to load; predictor disabled";
-        }
-        return;
+#ifdef MAAEND_WITH_NCNN
+    ncnn_model_ = NcnnModel::load(MAA_NS::path(refModelPath), threads, "polar_with_ref");
+    if (!ncnn_model_) {
+        LogError << "CameraOrientation: ncnn model failed to load; predictor disabled";
     }
-
+#else
     try {
         ortEnv = std::make_unique<Ort::Env>(ORT_LOGGING_LEVEL_WARNING, "MapLocatorCameraOrientation");
     }
@@ -60,8 +59,10 @@ CameraOrientationPredictor::CameraOrientationPredictor(const std::string& refMod
         LogError << "CameraOrientation: predictor disabled";
         ortEnv.reset();
     }
+#endif
 }
 
+#ifndef MAAEND_WITH_NCNN
 bool CameraOrientationPredictor::loadSession(
     const std::string& modelPath,
     const char* tag,
@@ -84,6 +85,8 @@ bool CameraOrientationPredictor::loadSession(
         return false;
     }
 }
+
+#endif
 
 std::optional<CameraOrientation> CameraOrientationPredictor::predict(
     const cv::Mat& minimap,
@@ -134,45 +137,50 @@ std::optional<CameraOrientation> CameraOrientationPredictor::infer(
         return std::nullopt;
     }
 
+    const std::uint8_t* referenceData = stripScratch.reference.ptr<std::uint8_t>();
+    const size_t stripPixels = stripScratch.reference.total();
+
+    // 缺口占比：参考条带 alpha（第 4 通道）< 255 的像素占比，仅作诊断日志。
+    int64_t gapPixels = 0;
+    for (size_t i = 0; i < stripPixels; ++i) {
+        if (referenceData[i * 4 + 3] < 255) {
+            ++gapPixels;
+        }
+    }
+    const double gapFraction = static_cast<double>(gapPixels) / static_cast<double>(stripPixels);
+    LogInfo << "CameraOrientation ref:" << VAR(zoneId) << VAR(x) << VAR(y) << VAR(scale) << VAR(gapFraction);
+
+    // 分类器输入固定为 7 通道参考配对 [obs.BGR, ref.BGR, ref.A]。
+    refInputScratch.create(kOrientationStripHeight, kOrientationStripWidth, CV_MAKETYPE(CV_8U, 7));
+    const cv::Mat sources[] = { stripScratch.observed, stripScratch.reference };
+    // 源通道跨矩阵连续编号：[0,3) 观测 BGR、[3,7) 参考 BGR + alpha，因此恒等映射。
+    const int fromTo[] = { 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6 };
+    cv::mixChannels(sources, std::size(sources), &refInputScratch, 1, fromTo, 7);
+    std::uint8_t* classifierData = refInputScratch.ptr<std::uint8_t>();
+    const int classifierChannels = 7;
+
+#ifdef MAAEND_WITH_NCNN
+    // ncnn 版输入是 float NCHW、取值 0~255（/255 已折进首层卷积），与 ORT 版的 uint8 NHWC 只差排布。
+    constexpr size_t kPlane = static_cast<size_t>(kOrientationStripHeight) * kOrientationStripWidth;
+    chw_scratch_.resize(kPlane * classifierChannels);
+    for (size_t i = 0; i < kPlane; ++i) {
+        for (int c = 0; c < classifierChannels; ++c) {
+            chw_scratch_[static_cast<size_t>(c) * kPlane + i] = static_cast<float>(classifierData[i * classifierChannels + c]);
+        }
+    }
+    if (!ncnn_model_->run(
+            chw_scratch_.data(),
+            classifierChannels,
+            kOrientationStripHeight,
+            kOrientationStripWidth,
+            kOrientationStripWidth,
+            output_scratch_)) {
+        LogError << "CameraOrientation: ncnn inference failed" << VAR(zoneId);
+        return std::nullopt;
+    }
+    return decodePmf(output_scratch_.data(), output_scratch_.size(), camera_heading_prior);
+#else
     try {
-        const std::uint8_t* referenceData = stripScratch.reference.ptr<std::uint8_t>();
-        const size_t stripPixels = stripScratch.reference.total();
-
-        // 缺口占比：参考条带 alpha（第 4 通道）< 255 的像素占比，仅作诊断日志。
-        int64_t gapPixels = 0;
-        for (size_t i = 0; i < stripPixels; ++i) {
-            if (referenceData[i * 4 + 3] < 255) {
-                ++gapPixels;
-            }
-        }
-        const double gapFraction = static_cast<double>(gapPixels) / static_cast<double>(stripPixels);
-        LogInfo << "CameraOrientation ref:" << VAR(zoneId) << VAR(x) << VAR(y) << VAR(scale) << VAR(gapFraction);
-
-        // 分类器输入固定为 7 通道参考配对 [obs.BGR, ref.BGR, ref.A]。
-        refInputScratch.create(kOrientationStripHeight, kOrientationStripWidth, CV_MAKETYPE(CV_8U, 7));
-        const cv::Mat sources[] = { stripScratch.observed, stripScratch.reference };
-        // 源通道跨矩阵连续编号：[0,3) 观测 BGR、[3,7) 参考 BGR + alpha，因此恒等映射。
-        const int fromTo[] = { 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6 };
-        cv::mixChannels(sources, std::size(sources), &refInputScratch, 1, fromTo, 7);
-        std::uint8_t* classifierData = refInputScratch.ptr<std::uint8_t>();
-        const int classifierChannels = 7;
-
-        if (ncnnModel) {
-            // ncnn 版输入是 float NCHW、取值 0~255（/255 已折进首层卷积），与 ORT 版的 uint8 NHWC 只差排布。
-            constexpr size_t kPlane = static_cast<size_t>(kOrientationStripHeight) * kOrientationStripWidth;
-            chwScratch.resize(kPlane * classifierChannels);
-            for (size_t i = 0; i < kPlane; ++i) {
-                for (int c = 0; c < classifierChannels; ++c) {
-                    chwScratch[static_cast<size_t>(c) * kPlane + i] = static_cast<float>(classifierData[i * classifierChannels + c]);
-                }
-            }
-            if (!ncnnModel->Run(chwScratch.data(), classifierChannels, kOrientationStripHeight, kOrientationStripWidth, outputScratch)) {
-                LogError << "CameraOrientation: ncnn inference failed" << VAR(zoneId);
-                return std::nullopt;
-            }
-            return decodePmf(outputScratch.data(), outputScratch.size(), camera_heading_prior);
-        }
-
         auto memoryInfo = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
         const std::array<int64_t, 4> classifierShape { 1, kOrientationStripHeight, kOrientationStripWidth, classifierChannels };
         Ort::Value classifierInput = Ort::Value::CreateTensor<std::uint8_t>(
@@ -198,6 +206,7 @@ std::optional<CameraOrientation> CameraOrientationPredictor::infer(
         LogError << "CameraOrientation: inference failed" << VAR(zoneId) << VAR(e.what());
         return std::nullopt;
     }
+#endif
 }
 
 std::optional<CameraOrientation>

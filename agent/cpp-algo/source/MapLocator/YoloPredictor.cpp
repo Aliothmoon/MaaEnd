@@ -21,26 +21,28 @@ YoloPredictor::YoloPredictor(const std::string& yoloModelPath, double confThresh
 {
     if (!yoloModelPath.empty()) {
         fs::path modelPath = MAA_NS::path(yoloModelPath);
-        // 后端随打包的模型走：有 ncnn 版就只用 ncnn，缺文件或加载失败即停用，不回退 onnxruntime。
-        if (const auto ncnnFiles = FindNcnnModel(modelPath)) {
-            ncnnModel = NcnnModel::Load(*ncnnFiles, threads, "yolo");
-            if (!ncnnModel) {
-                LogError << "YOLO Error: ncnn model failed to load; predictor disabled.";
-                return;
-            }
+#ifdef MAAEND_WITH_NCNN
+        ncnn_model_ = NcnnModel::load(modelPath, threads, "yolo");
+        if (!ncnn_model_) {
+            LogError << "YOLO Error: ncnn model failed to load; predictor disabled.";
+            return;
         }
-        else {
-            ortEnv = std::make_unique<Ort::Env>(ORT_LOGGING_LEVEL_WARNING, "MapLocatorYolo");
-            Ort::SessionOptions sessionOptions;
-            sessionOptions.SetIntraOpNumThreads(std::max(1, threads));
-            sessionOptions.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_BASIC);
+#else
+        ortEnv = std::make_unique<Ort::Env>(ORT_LOGGING_LEVEL_WARNING, "MapLocatorYolo");
+        Ort::SessionOptions sessionOptions;
+        sessionOptions.SetIntraOpNumThreads(std::max(1, threads));
+        sessionOptions.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_BASIC);
 
-            auto osModelPath = MAA_NS::to_osstring(yoloModelPath);
-            ortSession = std::make_unique<Ort::Session>(*ortEnv, osModelPath.c_str(), sessionOptions);
-        }
+        auto osModelPath = MAA_NS::to_osstring(yoloModelPath);
+        ortSession = std::make_unique<Ort::Session>(*ortEnv, osModelPath.c_str(), sessionOptions);
+#endif
         isYoloLoaded = true;
 
         fs::path jsonPath = modelPath;
+#ifdef MAAEND_WITH_NCNN
+        // cls.ncnn.param 与 cls.onnx 共用 cls.json 的类别与区域映射。
+        jsonPath.replace_extension();
+#endif
         jsonPath.replace_extension(".json");
 
         auto j_opt = common::OpenJsoncFile(jsonPath);
@@ -68,6 +70,15 @@ YoloPredictor::YoloPredictor(const std::string& yoloModelPath, double confThresh
             LogWarn << "Config file not found or invalid json: " << jsonPath;
         }
 
+#ifdef MAAEND_WITH_NCNN
+        if (yoloClassNames.empty()) {
+            LogError << "YOLO Error: ncnn model requires a nonempty class list" << VAR(jsonPath);
+            ncnn_model_.reset();
+            isYoloLoaded = false;
+            return;
+        }
+#endif
+
         fs::path tileMappingPath = modelPath;
         tileMappingPath.replace_filename(MAA_NS::path("tile_mapping.json"));
         auto tileMappingOpt = common::OpenJsoncFile(tileMappingPath);
@@ -84,7 +95,7 @@ YoloPredictor::YoloPredictor(const std::string& yoloModelPath, double confThresh
             LogWarn << "Tile mapping file not found or invalid json" << VAR(tileMappingPathUtf8);
         }
 
-        LogInfo << "YOLO Model loaded successfully." << VAR(ncnnModel != nullptr);
+        LogInfo << "YOLO Model loaded successfully.";
     }
 }
 
@@ -113,7 +124,7 @@ YoloCoarseResult YoloPredictor::predictCoarseByYOLO(const cv::Mat& minimap)
     std::lock_guard<std::mutex> lock(yoloMutex);
     YoloCoarseResult result;
 
-    if (!isYoloLoaded || (!ortSession && !ncnnModel)) {
+    if (!isYoloLoaded) {
         LogError << "YOLO Error: Model is NOT loaded.";
         return result;
     }
@@ -175,43 +186,41 @@ YoloCoarseResult YoloPredictor::predictCoarseByYOLO(const cv::Mat& minimap)
 
     const float* outputData = nullptr;
     size_t outputCount = 0;
-    std::vector<Ort::Value> outputTensors;
-    if (ncnnModel) {
-        if (!ncnnModel->Run(inputTensorScratch.data(), 3, OUTPUT_SIZE, OUTPUT_SIZE, outputScratch)) {
-            LogError << "YOLO Error: ncnn inference failed.";
-            return result;
-        }
-        outputData = outputScratch.data();
-        outputCount = outputScratch.size();
+#ifdef MAAEND_WITH_NCNN
+    if (!ncnn_model_->run(inputTensorScratch.data(), 3, OUTPUT_SIZE, OUTPUT_SIZE, yoloClassNames.size(), output_scratch_)) {
+        LogError << "YOLO Error: ncnn inference failed.";
+        return result;
     }
-    else {
-        constexpr std::array<int64_t, 4> kInputShape { 1, 3, OUTPUT_SIZE, OUTPUT_SIZE };
+    outputData = output_scratch_.data();
+    outputCount = output_scratch_.size();
+#else
+    constexpr std::array<int64_t, 4> kInputShape { 1, 3, OUTPUT_SIZE, OUTPUT_SIZE };
 
-        auto memoryInfo = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-        Ort::Value inputTensor = Ort::Value::CreateTensor<float>(
-            memoryInfo,
-            inputTensorScratch.data(),
-            inputTensorScratch.size(),
-            kInputShape.data(),
-            kInputShape.size());
+    auto memoryInfo = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
+    Ort::Value inputTensor = Ort::Value::CreateTensor<float>(
+        memoryInfo,
+        inputTensorScratch.data(),
+        inputTensorScratch.size(),
+        kInputShape.data(),
+        kInputShape.size());
 
-        if (inputNodeNames.empty() || outputNodeNames.empty()) {
-            LogError << "YOLO Error: input/output node names are not configured. Check model JSON sidecar.";
-            return result;
-        }
-
-        // Run Inference
-        const char* inName = inputNodeNames[0].c_str();
-        const char* outName = outputNodeNames[0].c_str();
-        outputTensors = ortSession->Run(Ort::RunOptions { nullptr }, &inName, &inputTensor, 1, &outName, 1);
-
-        if (outputTensors.empty()) {
-            return result;
-        }
-
-        outputData = outputTensors.front().GetTensorData<float>();
-        outputCount = outputTensors.front().GetTensorTypeAndShapeInfo().GetElementCount();
+    if (inputNodeNames.empty() || outputNodeNames.empty()) {
+        LogError << "YOLO Error: input/output node names are not configured. Check model JSON sidecar.";
+        return result;
     }
+
+    // Run Inference
+    const char* inName = inputNodeNames[0].c_str();
+    const char* outName = outputNodeNames[0].c_str();
+    auto outputTensors = ortSession->Run(Ort::RunOptions { nullptr }, &inName, &inputTensor, 1, &outName, 1);
+
+    if (outputTensors.empty()) {
+        return result;
+    }
+
+    outputData = outputTensors.front().GetTensorData<float>();
+    outputCount = outputTensors.front().GetTensorTypeAndShapeInfo().GetElementCount();
+#endif
 
     // Find max confidence
     int maxIdx = -1;

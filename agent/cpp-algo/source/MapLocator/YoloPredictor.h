@@ -2,15 +2,20 @@
 
 #include <memory>
 #include <mutex>
-#include <onnxruntime/onnxruntime_cxx_api.h>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
+#ifndef MAAEND_WITH_NCNN
+#include <onnxruntime/onnxruntime_cxx_api.h>
+#endif
+
 #include <MaaUtils/NoWarningCV.hpp>
 
 #include "MapTypes.h"
+#ifdef MAAEND_WITH_NCNN
 #include "NcnnModel.h"
+#endif
 
 namespace maplocator
 {
@@ -43,11 +48,13 @@ private:
         MEO_JSONIZATION(MEO_OPT base_class, MEO_OPT x, MEO_OPT y, MEO_OPT w, MEO_OPT h, MEO_OPT infer_margin)
     };
 
+#ifdef MAAEND_WITH_NCNN
+    std::unique_ptr<NcnnModel> ncnn_model_;
+    std::vector<float> output_scratch_;
+#else
     std::unique_ptr<Ort::Env> ortEnv;
     std::unique_ptr<Ort::Session> ortSession;
-    // 模型目录里有 cls.ncnn.{param,bin} 时只用 ncnn，不建 onnxruntime session。
-    std::unique_ptr<NcnnModel> ncnnModel;
-    std::vector<float> outputScratch;
+#endif
     std::vector<std::string> inputNodeNames;
     std::vector<std::string> outputNodeNames;
 
