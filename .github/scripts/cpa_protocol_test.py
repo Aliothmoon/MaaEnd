@@ -9,7 +9,11 @@ import subprocess
 from urllib.parse import urlsplit
 
 REPOSITORY = "Aliothmoon/MaaEnd"
-MODELS = {"messages": "agnes-3.0-messages-test", "responses": "agnes-3.0-responses-test"}
+MODELS = {
+    "messages": "agnes-3.0-messages-test",
+    "responses": "agnes-3.0-responses-test",
+    "chat": "agnes-3.0-chat-test",
+}
 ANSWER = Path(".cache/cpa-protocol-answer.md")
 
 

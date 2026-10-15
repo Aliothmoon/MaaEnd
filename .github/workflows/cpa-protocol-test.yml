@@ -2,68 +2,69 @@ name: CPA Protocol Sandbox
 run-name: CPA ${{ inputs.protocol }} · fork issue ${{ inputs.issue_number }}
 
 on:
-    workflow_dispatch:
-        inputs:
-            issue_number:
-                description: "Issue number in this fork (the reproduced test case is 3)"
-                type: number
-                required: true
-                default: 3
-            protocol:
-                description: "CPA upstream protocol; the Codex client always uses Responses"
-                type: choice
-                required: true
-                default: messages
-                options:
-                    - messages
-                    - responses
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "Issue number in this fork (the reproduced test case is 3)"
+        type: number
+        required: true
+        default: 3
+      protocol:
+        description: "CPA upstream protocol; the Codex client always uses Responses"
+        type: choice
+        required: true
+        default: messages
+        options:
+          - messages
+          - responses
+          - chat
 
 permissions:
-    contents: read
-    issues: read
+  contents: read
+  issues: read
 
 concurrency:
-    group: cpa-protocol-sandbox
-    cancel-in-progress: false
+  group: cpa-protocol-sandbox
+  cancel-in-progress: false
 
 jobs:
-    analyze-copy:
-        if: github.repository == 'Aliothmoon/MaaEnd' && github.actor == github.repository_owner
-        runs-on: ubuntu-latest
-        timeout-minutes: 90
-        steps:
-            - name: Checkout fork
-              uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-              with:
-                  persist-credentials: false
+  analyze-copy:
+    if: github.repository == 'Aliothmoon/MaaEnd' && github.actor == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
-            - name: Verify the isolated runner offline
-              run: python3 -m unittest discover -s .github/scripts -p test_cpa_protocol_test.py -v
+      - name: Verify the isolated runner offline
+        run: python3 -m unittest discover -s .github/scripts -p test_cpa_protocol_test.py -v
 
-            - name: Set up Node.js
-              uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-              with:
-                  node-version: "22"
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22"
 
-            - name: Install the original Codex version
-              run: npm install --global @openai/codex@0.162.1
+      - name: Install the original Codex version
+        run: npm install --global @openai/codex@0.162.1
 
-            - name: Analyze the reproduced issue (no comments)
-              timeout-minutes: 80
-              env:
-                  GH_TOKEN: ${{ github.token }}
-                  GH_REPO: ${{ github.repository }}
-                  CPA_TEST_API_KEY: ${{ secrets.CPA_TEST_API_KEY }}
-                  CPA_TEST_API_BASE_URL: ${{ secrets.CPA_TEST_API_BASE_URL }}
-                  TEST_PROTOCOL: ${{ inputs.protocol }}
-                  TEST_ISSUE_NUMBER: ${{ inputs.issue_number }}
-              run: python3 .github/scripts/cpa_protocol_test.py
+      - name: Analyze the reproduced issue (no comments)
+        timeout-minutes: 80
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          CPA_TEST_API_KEY: ${{ secrets.CPA_TEST_API_KEY }}
+          CPA_TEST_API_BASE_URL: ${{ secrets.CPA_TEST_API_BASE_URL }}
+          TEST_PROTOCOL: ${{ inputs.protocol }}
+          TEST_ISSUE_NUMBER: ${{ inputs.issue_number }}
+        run: python3 .github/scripts/cpa_protocol_test.py
 
-            - name: Upload sanitized logs and conclusion
-              if: always()
-              uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-              with:
-                  name: cpa-${{ inputs.protocol }}-issue-${{ inputs.issue_number }}-attempt-${{ github.run_attempt }}
-                  path: ${{ runner.temp }}/cpa-protocol-artifacts/
-                  if-no-files-found: warn
-                  retention-days: 7
+      - name: Upload sanitized logs and conclusion
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: cpa-${{ inputs.protocol }}-issue-${{ inputs.issue_number }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/cpa-protocol-artifacts/
+          if-no-files-found: warn
+          retention-days: 7

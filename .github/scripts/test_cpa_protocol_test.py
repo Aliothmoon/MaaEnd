@@ -25,6 +25,10 @@ class RunnerTests(unittest.TestCase):
     def test_valid_inputs(self):
         self.assertEqual(probe.validate(environment()), ("3", "messages", probe.MODELS["messages"], TEST_BASE_URL))
 
+    def test_chat_protocol_selects_isolated_chat_model(self):
+        self.assertEqual(probe.validate(dict(environment(), TEST_PROTOCOL="chat")),
+                         ("3", "chat", "agnes-3.0-chat-test", TEST_BASE_URL))
+
     def test_rejects_main_repository_or_foreign_gh_repo(self):
         for key in ("GITHUB_REPOSITORY", "GH_REPO"):
             with self.subTest(key=key), self.assertRaises(ValueError):
