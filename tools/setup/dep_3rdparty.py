@@ -20,6 +20,7 @@
 """
 
 import argparse
+import hashlib
 import platform
 import shutil
 import socket
@@ -43,6 +44,12 @@ TIMEOUT: int = 30
 WEBVIEW2_SDK_VERSION: str = "1.0.2210.55"
 WEBVIEW2_NUGET_URL_TEMPLATE: str = (
     "https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/{version}"
+)
+# 固定版本的包内容校验：解压前比对 SHA256，版本 pin 之外再挡住被替换/被篡改的 nupkg。
+# 取自 https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/1.0.2210.55
+# （与 NuGet 页面上的包一致；两份独立下载的副本哈希相同）。
+WEBVIEW2_SDK_SHA256: str = (
+    "c0945ddfe38272f10f24673a1cb07b54b018f614eec85d3e830628369039ad3d"
 )
 WEBVIEW2_INSTALL_DIR: Path = THIRDPARTY_DIR / "webview2"
 WEBVIEW2_VERSION_SENTINEL: Path = WEBVIEW2_INSTALL_DIR / ".maaend-webview2-version"
@@ -168,6 +175,18 @@ def _download_to_file(url: str, dest_path: Path) -> bool:
     return True
 
 
+def _sha256_file(path: Path) -> str:
+    """计算文件 SHA256（十六进制小写）；读取失败返回空串。"""
+    digest = hashlib.sha256()
+    try:
+        with open(path, "rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError:
+        return ""
+    return digest.hexdigest()
+
+
 def _read_installed_webview2_version() -> str:
     """读取本地 sentinel 文件中的版本号；缺失或不可读返回空串。"""
     if not WEBVIEW2_VERSION_SENTINEL.exists():
@@ -242,6 +261,23 @@ def download_webview2(skip_if_exist: bool = True) -> bool:
 
     print(Console.info(t("inf_webview2_downloading", version=WEBVIEW2_SDK_VERSION)))
     if not _download_to_file(url, nupkg_path):
+        return False
+
+    # 版本 pin 只保证「地址不变」，内容仍要靠哈希固定：校验失败直接中止，不解压可疑包。
+    expected_hash = WEBVIEW2_SDK_SHA256.lower()
+    actual_hash = _sha256_file(nupkg_path)
+    if actual_hash != expected_hash:
+        # 本地化键 err_webview2_hash_mismatch 需与 tools/setup/locals 一起补，此处直接给出期望/实际值。
+        print(
+            Console.err(
+                "[ERR] WebView2 SDK integrity check failed\n"
+                f"  package:  {url}\n"
+                f"  expected: sha256 {expected_hash}\n"
+                f"  actual:   sha256 {actual_hash or '<unreadable file>'}\n"
+                "  Refusing to extract an unexpected package."
+            )
+        )
+        nupkg_path.unlink(missing_ok=True)
         return False
 
     print(Console.info(t("inf_webview2_extracting", dest=WEBVIEW2_INSTALL_DIR)))
