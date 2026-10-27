@@ -41,6 +41,9 @@ constexpr int kLookAnchorY = kViewportH / 2;
 // 未发出的移动只保留最新一次：队列尾部连续 kMoveBatch 条移动会被替换掉
 constexpr size_t kMoveBatch = 2;
 
+// 一次 look 的原子命令组长度：登记坐标 → 位移 → 回零 → 回位
+constexpr size_t kLookGroupSize = 4;
+
 std::string jsonEscape(std::string_view src)
 {
     std::string out;
@@ -155,6 +158,7 @@ void InputBridge::Detach()
     native_ = false;
     webview_.Reset();
     queue_.clear();
+    pending_dropped_ = 0;
 }
 
 void InputBridge::logNativeMode()
@@ -431,27 +435,50 @@ void InputBridge::onMouseMove(LPARAM lparam)
     dispatchMouse("mouseMoved", buttonName(buttons_ & -buttons_), 0);
 }
 
-// 只在页面里产生一次带位移的 mousemove，再以零位移回位；不移动系统光标，也不改窗口或焦点
+// 只在页面里产生一次带位移的 mousemove，再以零位移回位；不移动系统光标，也不改窗口或焦点。
+// 4 条命令作为同一个 group 整组入队：队列溢出时整组丢弃，不会留下「已位移未回零」的半组。
 void InputBridge::dispatchLook(int dx, int dy)
 {
+    ++look_group_;
+    pushCommands(LookCommands(dx, dy, modifiers_, look_group_), true);
+}
+
+std::vector<InputBridge::Command> InputBridge::LookCommands(int dx, int dy, int modifiers, uint64_t group)
+{
+    // 协议约定（README「与 MaaFramework 的约定」）：单条 |dx|<=640 / |dy|<=360，
+    // 更大的转向由发送方拆成多条消息。这里只把锚点钳到视口内，既不放大位移，
+    // 也不合并连续位移 —— 合并会丢掉旋转量。
     const int x = std::clamp(kLookAnchorX + dx, 0, kViewportW - 1);
     const int y = std::clamp(kLookAnchorY + dy, 0, kViewportH - 1);
-    const auto make_move = [&](int mx, int my) {
+    const auto make_move = [modifiers](int mx, int my) {
         return std::format(
             R"({{"type":"mouseMoved","x":{},"y":{},"button":"none","buttons":0,"clickCount":0,"modifiers":{}}})",
             mx,
             my,
-            modifiers_);
+            modifiers);
     };
-    enqueue(
-        "Runtime.evaluate",
-        std::format(
+    std::vector<Command> commands;
+    commands.reserve(kLookGroupSize);
+    commands.push_back(Command {
+        .method = "Runtime.evaluate",
+        .params = std::format(
             R"js({{"expression":"window.__maaShellLook&&window.__maaShellLook({},{})"}})js",
             x,
-            y));
-    enqueue("Input.dispatchMouseEvent", make_move(x, y));
-    enqueue("Runtime.evaluate", R"js({"expression":"window.__maaShellZeroNext&&window.__maaShellZeroNext()"})js");
-    enqueue("Input.dispatchMouseEvent", make_move(kLookAnchorX, kLookAnchorY));
+            y),
+        .group = group,
+    });
+    commands.push_back(Command { .method = "Input.dispatchMouseEvent", .params = make_move(x, y), .group = group });
+    commands.push_back(Command {
+        .method = "Runtime.evaluate",
+        .params = R"js({"expression":"window.__maaShellZeroNext&&window.__maaShellZeroNext()"})js",
+        .group = group,
+    });
+    commands.push_back(Command {
+        .method = "Input.dispatchMouseEvent",
+        .params = make_move(kLookAnchorX, kLookAnchorY),
+        .group = group,
+    });
+    return commands;
 }
 
 void InputBridge::onMouseWheel(bool horizontal, WPARAM wparam, LPARAM lparam)
@@ -572,9 +599,13 @@ void InputBridge::dispatchMouse(std::string_view type, std::string_view button, 
 
     // 页面策略按坐标认出控制器的事件
     const std::string expect = std::format("window.__maaShellExpect&&window.__maaShellExpect({},{})", pointer_.x, pointer_.y);
-    queue_.push_back(Command { .method = "Runtime.evaluate", .params = std::format(R"({{"expression":"{}"}})", jsonEscape(expect)), .move = move });
-    queue_.push_back(Command { .method = "Input.dispatchMouseEvent", .params = std::move(params), .move = move });
-    pump();
+    std::vector<Command> commands;
+    commands.reserve(kMoveBatch);
+    commands.push_back(
+        Command { .method = "Runtime.evaluate", .params = std::format(R"({{"expression":"{}"}})", jsonEscape(expect)), .move = move });
+    commands.push_back(Command { .method = "Input.dispatchMouseEvent", .params = std::move(params), .move = move });
+    // 登记坐标与投递事件是成对的，整组入队/整组放弃，不会只留下其中一条
+    pushCommands(std::move(commands), true);
 }
 
 void InputBridge::evaluate(std::string_view expression)
@@ -584,8 +615,77 @@ void InputBridge::evaluate(std::string_view expression)
 
 void InputBridge::enqueue(std::string method, std::string params)
 {
-    queue_.push_back(Command { .method = std::move(method), .params = std::move(params) });
+    std::vector<Command> commands;
+    commands.push_back(Command { .method = std::move(method), .params = std::move(params) });
+    // 非 look 命令是控制器事件的载体，超限时不丢弃（顺序也不变），只在有空间时先裁掉旧的 look 组
+    pushCommands(std::move(commands), false);
+}
+
+void InputBridge::pushCommands(std::vector<Command> commands, bool atomic_group)
+{
+    const size_t count = commands.size();
+    if (count == 0) {
+        return;
+    }
+
+    size_t dropped = 0;
+    if (queue_.size() + count > kMaxQueue) {
+        const size_t room = count < kMaxQueue ? kMaxQueue - count : 0;
+        dropped = TrimQueue(queue_, room);
+    }
+    if (atomic_group && queue_.size() + count > kMaxQueue) {
+        // 腾不出整组空间就整组放弃，绝不拆组
+        pending_dropped_ += dropped + count;
+        reportOverflow();
+        return;
+    }
+
+    for (auto& command : commands) {
+        queue_.push_back(std::move(command));
+    }
+    pending_dropped_ += dropped;
+    reportOverflow();
     pump();
+}
+
+size_t InputBridge::TrimQueue(std::deque<Command>& queue, size_t limit)
+{
+    size_t dropped = 0;
+    while (queue.size() > limit) {
+        // 找最旧的完整 look 组：同一 group 的连续命令，长度等于一次 look 的命令数。
+        // 组被 pump 取走前几条时只剩残段，长度不等，跳过它继续往后找。
+        size_t begin = 0;
+        size_t length = 0;
+        for (size_t index = 0; index < queue.size();) {
+            const uint64_t group = queue[index].group;
+            size_t end = index + 1;
+            while (end < queue.size() && queue[end].group == group) {
+                ++end;
+            }
+            if (group != 0 && end - index == kLookGroupSize) {
+                begin = index;
+                length = end - index;
+                break;
+            }
+            index = end;
+        }
+        if (length == 0) {
+            break;
+        }
+        queue.erase(queue.begin() + static_cast<std::ptrdiff_t>(begin), queue.begin() + static_cast<std::ptrdiff_t>(begin + length));
+        dropped += length;
+    }
+    return dropped;
+}
+
+void InputBridge::reportOverflow()
+{
+    // 同一轮溢出只报一条 Warn，附带这一轮累计丢弃的条数；队列重新有余量时才算一轮结束
+    if (pending_dropped_ == 0 || queue_.size() >= kMaxQueue) {
+        return;
+    }
+    log::Warn("look queue overflow (cap {}): dropped {} CDP commands", kMaxQueue, pending_dropped_);
+    pending_dropped_ = 0;
 }
 
 void InputBridge::pump()
