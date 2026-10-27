@@ -193,6 +193,27 @@ bool InputBridge::ensureWidget()
     return widget_ != nullptr;
 }
 
+bool InputBridge::isWheelPointOnShell(LPARAM lparam) const
+{
+    // 视频/合成页在窗口被遮挡时会让 Chromium 丢弃原生滚轮；只有滚轮屏幕坐标
+    // 确实落在本壳体的可见区域时才走原生，否则交给 CDP。
+    if (IsIconic(hwnd_) || !IsWindowVisible(hwnd_)) {
+        return false;
+    }
+    const POINT point { GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };
+    const HWND hit = WindowFromPoint(point);
+    if (!hit) {
+        return false;
+    }
+    const HWND hit_root = GetAncestor(hit, GA_ROOT);
+    if (hit_root == hwnd_) {
+        return true;
+    }
+    // 视频合成页的 WindowFromPoint 可能返回 WebView2 的顶层 Chrome 窗口；
+    // 无法确认壳体可见时交给 CDP，避免原生消息被 Chromium 静默丢弃。
+    return false;
+}
+
 void InputBridge::updateModifiers(unsigned vk, bool down)
 {
     if (const int bit = modifierBit(vk); bit != 0) {
@@ -317,18 +338,28 @@ std::optional<LRESULT> InputBridge::HandleMessage(UINT msg, WPARAM wparam, LPARA
         onMouseButton(GET_XBUTTON_WPARAM(wparam) == XBUTTON1 ? kButtonBack : kButtonForward, msg == WM_XBUTTONDOWN, lparam);
         return TRUE;
 
-    case WM_MOUSEWHEEL:
-        if (try_native(msg)) {
+    case WM_MOUSEWHEEL: {
+        const bool native_allowed = mode_ == Mode::Native || (mode_ == Mode::Auto && isWheelPointOnShell(lparam));
+        if (native_allowed && try_native(msg)) {
             return 0;
+        }
+        if (mode_ == Mode::Auto && !native_allowed) {
+            log::Info("native wheel fallback: point not over shell");
         }
         onMouseWheel(false, wparam, lparam);
         return 0;
-    case WM_MOUSEHWHEEL:
-        if (try_native(msg)) {
+    }
+    case WM_MOUSEHWHEEL: {
+        const bool native_allowed = mode_ == Mode::Native || (mode_ == Mode::Auto && isWheelPointOnShell(lparam));
+        if (native_allowed && try_native(msg)) {
             return 0;
+        }
+        if (mode_ == Mode::Auto && !native_allowed) {
+            log::Info("native wheel fallback: point not over shell");
         }
         onMouseWheel(true, wparam, lparam);
         return 0;
+    }
 
     case WM_KEYDOWN:
     case WM_KEYUP:

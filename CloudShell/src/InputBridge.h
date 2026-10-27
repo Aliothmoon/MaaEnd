@@ -51,6 +51,7 @@ private:
 
     bool ensureWidget();
     bool forwardNative(UINT msg, WPARAM wparam, LPARAM lparam);
+    bool isWheelPointOnShell(LPARAM lparam) const;
     void updateModifiers(unsigned vk, bool down);
     void logNativeMode();
 
