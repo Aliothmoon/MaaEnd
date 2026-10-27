@@ -276,12 +276,12 @@ void testWatchdogArm(HWND host)
 {
     const UINT_PTR timer = cloudshell::InputBridge::ArmWatchdog(host, 1);
     check(timer != 0, "watchdog timer arms on a live window");
-    check(cloudshell::InputBridge::WatchdogGatesInput(timer), "armed watchdog keeps the busy barrier");
     if (timer != 0) {
         KillTimer(host, timer);
     }
 
-    // 失效窗口上 SetTimer 返回 0（error 1400）：此时不能设置 busy 屏障，否则后续输入永久卡住
+    // 失效窗口上 SetTimer 返回 0（error 1400）：pump 需要识别失败并记一次 Error；
+    // busy_ 仍保持串行屏障（CDP 命令有严格先后），不能为了“不断流”改成并发投递。
     const HWND doomed = createHidden(host, kDecoyClass, 0, 0, 10, 10);
     if (!doomed) {
         check(false, "cannot create the window used for the watchdog failure case");
@@ -292,7 +292,6 @@ void testWatchdogArm(HWND host)
     SetLastError(0);
     const UINT_PTR failed = cloudshell::InputBridge::ArmWatchdog(doomed, 2);
     check(failed == 0, "watchdog arming fails on an invalid window");
-    check(!cloudshell::InputBridge::WatchdogGatesInput(failed), "failed watchdog does not set the busy barrier");
 }
 
 } // namespace

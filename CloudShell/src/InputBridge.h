@@ -70,9 +70,6 @@ public:
     // 启动看门狗定时器；返回 0 表示 SetTimer 失败（失效窗口即返回 0，error 1400）
     static UINT_PTR ArmWatchdog(HWND hwnd, uint64_t generation);
 
-    // 看门狗不可用（SetTimer 返回 0）时不得设置 busy_ 屏障，否则后续输入会永久卡住（N-04）
-    static bool WatchdogGatesInput(UINT_PTR timer);
-
 private:
     bool ensureWidget();
     bool forwardNative(UINT msg, WPARAM wparam, LPARAM lparam);

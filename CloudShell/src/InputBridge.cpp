@@ -703,11 +703,6 @@ UINT_PTR InputBridge::ArmWatchdog(HWND hwnd, uint64_t generation)
     return SetTimer(hwnd, static_cast<UINT_PTR>(generation), kCommandTimeoutMs, nullptr);
 }
 
-bool InputBridge::WatchdogGatesInput(UINT_PTR timer)
-{
-    return timer != 0;
-}
-
 void InputBridge::pump()
 {
     using Microsoft::WRL::Callback;
@@ -729,10 +724,11 @@ void InputBridge::pump()
             KillTimer(hwnd_, watchdog_timer_);
         }
         watchdog_timer_ = ArmWatchdog(hwnd_, generation);
-        // 看门狗起不来时（SetTimer 返回 0）不设 busy_ 屏障：命令照常投递，但不等待完成回调，
-        // 否则 busy_ 会永久为 true，后续输入全部卡住
-        busy_ = WatchdogGatesInput(watchdog_timer_);
-        if (!busy_ && !watchdog_error_reported_) {
+        // 看门狗起不来时（SetTimer 返回 0）只能记一次错误并降级为“无超时保护”，
+        // 但 busy_ 必须保持串行屏障：CDP 命令有严格先后（登记坐标先于派发事件），
+        // 去掉屏障会让后续命令并发投递、破坏页面策略的坐标匹配。
+        busy_ = true;
+        if (watchdog_timer_ == 0 && !watchdog_error_reported_) {
             watchdog_error_reported_ = true;
             log::Error(
                 "cannot create watchdog timer (error {}): CDP commands run without timeout guard",
