@@ -697,6 +697,17 @@ void InputBridge::reportOverflow()
     pending_dropped_ = 0;
 }
 
+UINT_PTR InputBridge::ArmWatchdog(HWND hwnd, uint64_t generation)
+{
+    // 独立的 timer id：上一条命令已投递的 WM_TIMER 不会命中下一条
+    return SetTimer(hwnd, static_cast<UINT_PTR>(generation), kCommandTimeoutMs, nullptr);
+}
+
+bool InputBridge::WatchdogGatesInput(UINT_PTR timer)
+{
+    return timer != 0;
+}
+
 void InputBridge::pump()
 {
     using Microsoft::WRL::Callback;
@@ -714,12 +725,19 @@ void InputBridge::pump()
         const std::wstring method = Utf8ToWide(command.method);
         const std::wstring params = Utf8ToWide(command.params);
         const uint64_t generation = ++generation_;
-        busy_ = true;
         if (watchdog_timer_ != 0) {
             KillTimer(hwnd_, watchdog_timer_);
         }
-        watchdog_timer_ = static_cast<UINT_PTR>(generation);
-        SetTimer(hwnd_, watchdog_timer_, kCommandTimeoutMs, nullptr);
+        watchdog_timer_ = ArmWatchdog(hwnd_, generation);
+        // 看门狗起不来时（SetTimer 返回 0）不设 busy_ 屏障：命令照常投递，但不等待完成回调，
+        // 否则 busy_ 会永久为 true，后续输入全部卡住
+        busy_ = WatchdogGatesInput(watchdog_timer_);
+        if (!busy_ && !watchdog_error_reported_) {
+            watchdog_error_reported_ = true;
+            log::Error(
+                "cannot create watchdog timer (error {}): CDP commands run without timeout guard",
+                GetLastError());
+        }
         const HRESULT hr = webview_->CallDevToolsProtocolMethod(
             method.c_str(),
             params.c_str(),
@@ -732,7 +750,7 @@ void InputBridge::pump()
                 }
                 busy_ = false;
                 pump();
-                if (!busy_) {
+                if (!busy_ && watchdog_timer_ != 0) {
                     KillTimer(hwnd_, watchdog_timer_);
                     watchdog_timer_ = 0;
                 }

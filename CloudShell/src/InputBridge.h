@@ -67,6 +67,12 @@ public:
     // 一次 look 产生的 4 条命令：登记坐标 → 位移 → 回零 → 回位。同一 group，不碰系统光标。
     static std::vector<Command> LookCommands(int dx, int dy, int modifiers, uint64_t group);
 
+    // 启动看门狗定时器；返回 0 表示 SetTimer 失败（失效窗口即返回 0，error 1400）
+    static UINT_PTR ArmWatchdog(HWND hwnd, uint64_t generation);
+
+    // 看门狗不可用（SetTimer 返回 0）时不得设置 busy_ 屏障，否则后续输入会永久卡住（N-04）
+    static bool WatchdogGatesInput(UINT_PTR timer);
+
 private:
     bool ensureWidget();
     bool forwardNative(UINT msg, WPARAM wparam, LPARAM lparam);
@@ -116,6 +122,7 @@ private:
     uint64_t generation_ = 0;
     // 每条命令独立 timer id，避免上一条命令已投递的 WM_TIMER 命中下一条
     UINT_PTR watchdog_timer_ = 0;
+    bool watchdog_error_reported_ = false;
 
     // 控制器消息里的按键状态与坐标不可靠（按下前的 WM_MOUSEMOVE 已带 MK_LBUTTON），以这里记录的为准
     int buttons_ = 0;
