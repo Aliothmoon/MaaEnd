@@ -32,9 +32,14 @@ constexpr int kButtonForward = 16;
 // 页面对话框或渲染进程卡死时 CDP 命令可能永远不返回，超时就丢弃，后面的输入才能继续
 constexpr UINT kCommandTimeoutMs = 3000;
 
-// 转向通道的虚拟指针锚点，页面视口固定 1280x720
-constexpr int kLookAnchorX = 640;
-constexpr int kLookAnchorY = 360;
+// 页面视口固定 1280x720（README「与 MaaFramework 的约定」），转向锚点即视口中线
+constexpr int kViewportW = 1280;
+constexpr int kViewportH = 720;
+constexpr int kLookAnchorX = kViewportW / 2;
+constexpr int kLookAnchorY = kViewportH / 2;
+
+// 未发出的移动只保留最新一次：队列尾部连续 kMoveBatch 条移动会被替换掉
+constexpr size_t kMoveBatch = 2;
 
 std::string jsonEscape(std::string_view src)
 {
@@ -429,8 +434,8 @@ void InputBridge::onMouseMove(LPARAM lparam)
 // 只在页面里产生一次带位移的 mousemove，再以零位移回位；不移动系统光标，也不改窗口或焦点
 void InputBridge::dispatchLook(int dx, int dy)
 {
-    const int x = std::clamp(kLookAnchorX + dx, 0, 1279);
-    const int y = std::clamp(kLookAnchorY + dy, 0, 719);
+    const int x = std::clamp(kLookAnchorX + dx, 0, kViewportW - 1);
+    const int y = std::clamp(kLookAnchorY + dy, 0, kViewportH - 1);
     const auto make_move = [&](int mx, int my) {
         return std::format(
             R"({{"type":"mouseMoved","x":{},"y":{},"button":"none","buttons":0,"clickCount":0,"modifiers":{}}})",
@@ -498,6 +503,7 @@ void InputBridge::onKey(bool down, WPARAM wparam, LPARAM lparam)
         jsonEscape(info->code),
         jsonEscape(key),
         info->location,
+        // TODO(#6841): location == 3 应改为 KeyLocation::Numpad 枚举比较，枚举由 #6841 的 KeyMap 补丁引入
         info->location == 3 ? R"(,"isKeypad":true)" : "",
         text_fields);
 
@@ -559,7 +565,7 @@ void InputBridge::dispatchMouse(std::string_view type, std::string_view button, 
 
     // 拖动时控制器每 10ms 投递一次移动，渲染进程按帧确认，命令会越积越多；还没发出的移动只保留最新的
     const bool move = type == "mouseMoved";
-    if (move && queue_.size() >= 2 && queue_.back().move && queue_[queue_.size() - 2].move) {
+    if (move && queue_.size() >= kMoveBatch && queue_.back().move && queue_[queue_.size() - kMoveBatch].move) {
         queue_.pop_back();
         queue_.pop_back();
     }

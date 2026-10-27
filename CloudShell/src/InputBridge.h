@@ -33,6 +33,9 @@ public:
 
     explicit InputBridge(HWND hwnd, Mode mode = Mode::Auto);
 
+    InputBridge(const InputBridge&) = delete;
+    InputBridge& operator=(const InputBridge&) = delete;
+
     void Attach(ICoreWebView2* webview);
     void Detach();
 
