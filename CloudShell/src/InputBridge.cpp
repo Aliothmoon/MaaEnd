@@ -44,6 +44,9 @@ constexpr size_t kMoveBatch = 2;
 // 一次 look 的原子命令组长度：登记坐标 → 位移 → 回零 → 回位
 constexpr size_t kLookGroupSize = 4;
 
+// 逐输入日志限频：在 #6841 提供 log::Debug 之前，最多每秒一条
+constexpr ULONGLONG kInputLogIntervalMs = 1000;
+
 std::string jsonEscape(std::string_view src)
 {
     std::string out;
@@ -353,7 +356,7 @@ std::optional<LRESULT> InputBridge::HandleMessage(UINT msg, WPARAM wparam, LPARA
             return 0;
         }
         if (mode_ == Mode::Auto && !native_allowed) {
-            log::Info("native wheel fallback: point not over shell");
+            logWheelFallback();
         }
         onMouseWheel(false, wparam, lparam);
         return 0;
@@ -364,7 +367,7 @@ std::optional<LRESULT> InputBridge::HandleMessage(UINT msg, WPARAM wparam, LPARA
             return 0;
         }
         if (mode_ == Mode::Auto && !native_allowed) {
-            log::Info("native wheel fallback: point not over shell");
+            logWheelFallback();
         }
         onMouseWheel(true, wparam, lparam);
         return 0;
@@ -424,7 +427,9 @@ void InputBridge::onMouseButton(int raw_button, bool down, LPARAM lparam)
         buttons_ &= ~button;
     }
 
-    log::Info("mouse {} {} ({}, {})", buttonName(button), down ? "down" : "up", pointer_.x, pointer_.y);
+    if (auto suffix = inputLogSuffix()) {
+        log::Info("mouse {} {} ({}, {}){}", buttonName(button), down ? "down" : "up", pointer_.x, pointer_.y, *suffix);
+    }
     dispatchMouse(down ? "mousePressed" : "mouseReleased", buttonName(button), 1);
 }
 
@@ -491,7 +496,9 @@ void InputBridge::onMouseWheel(bool horizontal, WPARAM wparam, LPARAM lparam)
 
     // 滚轮正值向上，CDP 的 deltaY 正值向下；水平方向一致
     const int delta = GET_WHEEL_DELTA_WPARAM(wparam);
-    log::Info("wheel horizontal={} delta={} ({}, {})", horizontal, delta, pointer_.x, pointer_.y);
+    if (auto suffix = inputLogSuffix()) {
+        log::Info("wheel horizontal={} delta={} ({}, {}){}", horizontal, delta, pointer_.x, pointer_.y, *suffix);
+    }
     dispatchMouse("mouseWheel", "none", 0, horizontal ? delta : 0, horizontal ? 0 : -delta);
 }
 
@@ -534,7 +541,9 @@ void InputBridge::onKey(bool down, WPARAM wparam, LPARAM lparam)
         info->location == 3 ? R"(,"isKeypad":true)" : "",
         text_fields);
 
-    log::Info("key vk={} {} {}", vk, down ? "down" : "up", info->code);
+    if (auto suffix = inputLogSuffix()) {
+        log::Info("key vk={} {} {}{}", vk, down ? "down" : "up", info->code, *suffix);
+    }
     // 页面策略会在 keydown 里补发 mouseenter，SDK 可能随之申请指针锁定，先记为控制器输入
     if (down) {
         evaluate("window.__maaShellExpect&&window.__maaShellExpect()");
@@ -750,6 +759,31 @@ void InputBridge::onWatchdog()
     ++generation_;
     busy_ = false;
     pump();
+}
+
+std::optional<std::string> InputBridge::inputLogSuffix()
+{
+    const ULONGLONG now = GetTickCount64();
+    if (input_log_tick_ != 0 && now - input_log_tick_ < kInputLogIntervalMs) {
+        ++input_log_suppressed_;
+        return std::nullopt;
+    }
+    input_log_tick_ = now != 0 ? now : 1;
+    if (input_log_suppressed_ == 0) {
+        return std::string();
+    }
+    std::string suffix = std::format(" (+{} suppressed)", input_log_suppressed_);
+    input_log_suppressed_ = 0;
+    return suffix;
+}
+
+void InputBridge::logWheelFallback()
+{
+    if (wheel_fallback_reported_) {
+        return;
+    }
+    wheel_fallback_reported_ = true;
+    log::Info("native wheel fallback: point not over shell (logged once per session)");
 }
 
 } // namespace cloudshell

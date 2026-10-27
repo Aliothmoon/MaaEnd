@@ -93,6 +93,10 @@ private:
     // 队列溢出时按「一轮」汇总报告一次丢弃条数
     void reportOverflow();
 
+    // 逐输入日志限频（log::Debug 由 #6841 提供前）：允许输出时返回后缀，限频时返回 nullopt
+    std::optional<std::string> inputLogSuffix();
+    void logWheelFallback();
+
 private:
     HWND hwnd_ = nullptr;
     Microsoft::WRL::ComPtr<ICoreWebView2> webview_;
@@ -119,6 +123,11 @@ private:
     int modifiers_ = 0;
     wchar_t pending_high_surrogate_ = 0;
     bool foreground_ = true;
+
+    // 滚轮回退只记一次；逐输入日志限频到每秒一条（见 inputLogSuffix）
+    bool wheel_fallback_reported_ = false;
+    ULONGLONG input_log_tick_ = 0;
+    size_t input_log_suppressed_ = 0;
 };
 
 } // namespace cloudshell
