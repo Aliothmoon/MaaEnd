@@ -223,22 +223,10 @@ bool InputBridge::forwardNative(UINT msg, WPARAM wparam, LPARAM lparam)
         break;
     }
     case WM_MOUSEWHEEL:
-    case WM_MOUSEHWHEEL: {
-        // 滚轮消息的坐标是屏幕坐标
-        POINT point { GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };
-        if (!ScreenToClient(widget_, &point)) {
-            return false;
-        }
-        lparam = MAKELPARAM(point.x, point.y);
-        // Chromium 按最近一次鼠标位置命中滚轮目标；后台窗口的真实光标不在窗口上时，
-        // 只投递滚轮会被丢弃。先投递同坐标的无按键移动，页面策略会把这类移动的位移清零。
-        if (!PostMessageW(widget_, WM_MOUSEMOVE, 0, lparam)) {
-            log::Warn("native input pre-move failed: msg=0x{:04x}", msg);
-            native_ = false;
-            return false;
-        }
+    case WM_MOUSEHWHEEL:
+        // WM_MOUSEWHEEL/WM_MOUSEHWHEEL 的 lParam 始终是屏幕坐标，Chromium 也按屏幕坐标命中；
+        // 转成客户区坐标会让滚轮落到错误位置或被丢弃。保持原 lParam 直接转交。
         break;
-    }
     case WM_KEYDOWN:
     case WM_KEYUP:
     case WM_SYSKEYDOWN:

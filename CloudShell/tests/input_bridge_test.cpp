@@ -225,13 +225,13 @@ int main()
     pumpMessages();
     {
         const Recorded* record = findLast(WM_MOUSEWHEEL);
-        checkMousePoint(record, 60, 50, "WM_MOUSEWHEEL converted from screen to widget client coordinates");
+        check(record && GET_X_LPARAM(record->lparam) == screen.x && GET_Y_LPARAM(record->lparam) == screen.y,
+              "WM_MOUSEWHEEL keeps screen coordinates");
         check(record && GET_WHEEL_DELTA_WPARAM(record->wparam) == WHEEL_DELTA, "WM_MOUSEWHEEL keeps wheel delta");
         const auto& messages = g_widget_log->messages;
         const bool pre_move = messages.size() >= 2 && messages[messages.size() - 2].message == WM_MOUSEMOVE
-                              && messages.back().message == WM_MOUSEWHEEL
-                              && messages[messages.size() - 2].lparam == messages.back().lparam;
-        check(pre_move, "WM_MOUSEWHEEL sends a same-position WM_MOUSEMOVE first");
+                              && messages.back().message == WM_MOUSEWHEEL;
+        check(!pre_move, "WM_MOUSEWHEEL does not synthesize a move");
     }
 
     clearLog();
