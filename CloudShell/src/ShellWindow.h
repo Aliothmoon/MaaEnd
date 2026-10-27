@@ -26,6 +26,7 @@ struct ShellOptions
     std::vector<std::wstring> extra_scripts;
     bool devtools = false;
     int debug_port = 0;
+    InputBridge::Mode input_mode = InputBridge::Mode::Auto;
 };
 
 // 所有逻辑都在主线程上运行：窗口消息、WebView2 回调与前台事件共用一个消息循环
