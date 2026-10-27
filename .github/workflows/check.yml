@@ -85,7 +85,7 @@ jobs:
         shell: bash
         run: uv run -m tools.setup.dep_3rdparty --webview2
 
-      - name: Build and run native input test
+      - name: Build CloudShell and run native input test
         shell: powershell
         working-directory: CloudShell
         run: |
@@ -98,4 +98,5 @@ jobs:
           & $vsDevShell -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
           cmake --preset "NinjaMulti Win32" -DCLOUDSHELL_BUILD_TESTS=ON
           cmake --build --preset Release --target cloud-shell-input-bridge-test
+          cmake --build --preset Release --target cloud-shell
           ctest --test-dir build -C RelWithDebInfo --output-on-failure
