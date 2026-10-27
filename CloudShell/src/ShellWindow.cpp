@@ -89,7 +89,7 @@ bool ShellWindow::Create()
 
     // 创建前不知道窗口落在哪块显示器上，拿到 hwnd 后再按实际 DPI 算整窗尺寸
     applyFixedClientSize(GetDpiForWindow(hwnd_), nullptr);
-    input_ = std::make_unique<InputBridge>(hwnd_);
+    input_ = std::make_unique<InputBridge>(hwnd_, options_.input_mode);
 
     g_foreground_owner = this;
     foreground_hook_ = SetWinEventHook(
@@ -116,8 +116,11 @@ int ShellWindow::Run()
     MSG msg {};
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
         // PostMessage 输入每次操作前都会投递 WM_ACTIVATE，真实的激活是同步发送的、不经过这里。
-        // 交给 DefWindowProc 会把焦点从网页抢到顶层窗口，网页失焦时 SDK 会释放所有按住的键
+        // 原生输入模式把它转交给 Chrome_WidgetWin_1；CDP 模式仍丢弃，避免 DefWindowProc 把焦点抢到顶层。
         if (msg.message == WM_ACTIVATE) {
+            if (input_) {
+                input_->HandleMessage(msg.message, msg.wParam, msg.lParam);
+            }
             continue;
         }
         TranslateMessage(&msg);
@@ -143,7 +146,8 @@ LRESULT CALLBACK ShellWindow::windowProc(HWND hwnd, UINT msg, WPARAM wparam, LPA
 
 LRESULT ShellWindow::handleMessage(UINT msg, WPARAM wparam, LPARAM lparam)
 {
-    if (input_) {
+    // 真实激活走默认处理；MaaFramework 投递的 WM_ACTIVATE 在 Run 中已直接交给 InputBridge
+    if (msg != WM_ACTIVATE && input_) {
         if (auto handled = input_->HandleMessage(msg, wparam, lparam)) {
             return *handled;
         }

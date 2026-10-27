@@ -10,6 +10,7 @@
 | 客户区 | 1280×720 物理像素，网页视口与之一一对应（缩放比例固定为 1） |
 | 截图方式 | `PrintWindow` |
 | 鼠标 / 键盘 | `PostMessage` |
+| 转向（look） | `WM_APP+0x51`：wParam=dx、lParam=dy，均为 int16，单位为客户区像素，一条消息一次转向；单条限制 \|dx\| ≤ 640、\|dy\| ≤ 360（约 ±80°/±40°），更大的转向必须由发送方拆成多条消息，壳侧不做放大 |
 
 ## 构建
 
@@ -20,7 +21,7 @@ cmake --preset "NinjaMulti Win32"
 cmake --build --preset Release
 ```
 
-WebView2 SDK 按固定版本与 SHA256 自动下载到构建目录，下载会读取 `HTTPS_PROXY` 等代理环境变量；离线时可以用 `-DWEBVIEW2_SDK_DIR=<已解压的 NuGet 包>` 指定。产物位于 `build/bin/RelWithDebInfo/cloud-shell.exe`。
+WebView2 SDK 的版本与校验由 `tools/setup/dep_3rdparty.py` 单点维护。在仓库根目录运行 `uv run -m tools.setup.dep_3rdparty --webview2`，固定版本会准备到 `agent/cpp-algo/3rdparty/webview2`；CMake 也可以通过 `WEBVIEW2_SDK_DIR` 缓存变量或同名环境变量指定已有的 SDK。`build_and_install.py --cloud-shell` 会自动准备该依赖，无需重复运行准备命令。产物位于 `build/bin/RelWithDebInfo/cloud-shell.exe`。
 
 不想本地编译时，可以在 Windows 上运行 `uv run setup-workspace`，让脚本从 CI artifact 自动下载预编译好的 `install/cloud-shell/cloud-shell.exe`；也可以用 CI 页面上的 `cloud-shell-win-<arch>` artifact 手动下载。
 
@@ -29,8 +30,11 @@ WebView2 SDK 按固定版本与 SHA256 自动下载到构建目录，下载会�
 ```bash
 cloud-shell [--url <url>] [--width 1280] [--height 720] [--title <title>]
             [--user-data-dir <dir>] [--inject <script.js>]... [--devtools] [--debug-port <port>]
+            [--input-mode auto|native|cdp]
 ```
 
+- 输入默认 `auto`：优先把 MaaFramework 投递到宿主顶层的原生 Windows 消息（含 `WM_ACTIVATE` 与客户区坐标转换）转交给宿主内的 `Chrome_WidgetWin_1`；找不到该窗口或转发失败时自动回退到 CDP 输入。`--input-mode native|cdp` 可强制选择，CDP 实现作为兼容回退保留。
+- CloudShell 内 `requestPointerLock` 一律拒绝，避免自动化输入后真实鼠标被游戏锁定；镜头转向仍走独立的页面内位移通道，不移动系统光标。
 - 日志写到 `<工作目录>/debug/cloud-shell.log`。
 - 登录数据默认放在 `<工作目录>/cache/cloud-shell/WebView2`。
 - `--inject` 追加注入调试脚本，`--devtools` 打开 DevTools，`--debug-port` 打开只监听本机的远程调试端口。

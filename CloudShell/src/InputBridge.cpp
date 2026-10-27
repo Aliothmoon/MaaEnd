@@ -1,6 +1,9 @@
 #include "InputBridge.h"
 
+#include <algorithm>
+#include <cwchar>
 #include <format>
+#include <iterator>
 
 #include <windowsx.h>
 #include <wrl.h>
@@ -26,9 +29,23 @@ constexpr int kButtonMiddle = 4;
 constexpr int kButtonBack = 8;
 constexpr int kButtonForward = 16;
 
-constexpr UINT_PTR kWatchdogTimer = 1;
 // 页面对话框或渲染进程卡死时 CDP 命令可能永远不返回，超时就丢弃，后面的输入才能继续
 constexpr UINT kCommandTimeoutMs = 3000;
+
+// 页面视口固定 1280x720（README「与 MaaFramework 的约定」），转向锚点即视口中线
+constexpr int kViewportW = 1280;
+constexpr int kViewportH = 720;
+constexpr int kLookAnchorX = kViewportW / 2;
+constexpr int kLookAnchorY = kViewportH / 2;
+
+// 未发出的移动只保留最新一次：队列尾部连续 kMoveBatch 条移动会被替换掉
+constexpr size_t kMoveBatch = 2;
+
+// 一次 look 的原子命令组长度：登记坐标 → 位移 → 回零 → 回位
+constexpr size_t kLookGroupSize = 4;
+
+// 逐输入日志限频：在 #6841 提供 log::Debug 之前，最多每秒一条
+constexpr ULONGLONG kInputLogIntervalMs = 1000;
 
 std::string jsonEscape(std::string_view src)
 {
@@ -119,35 +136,186 @@ int modifierBit(unsigned vk)
 
 } // namespace
 
-InputBridge::InputBridge(HWND hwnd)
+InputBridge::InputBridge(HWND hwnd, Mode mode)
     : hwnd_(hwnd)
+    , mode_(mode)
 {
 }
 
 void InputBridge::Attach(ICoreWebView2* webview)
 {
     webview_ = webview;
+    if (mode_ != Mode::Cdp) {
+        native_ = ensureWidget();
+    }
+    logNativeMode();
 }
 
 void InputBridge::Detach()
 {
-    KillTimer(hwnd_, kWatchdogTimer);
+    if (watchdog_timer_ != 0) {
+        KillTimer(hwnd_, watchdog_timer_);
+        watchdog_timer_ = 0;
+    }
+    widget_ = nullptr;
+    native_ = false;
     webview_.Reset();
     queue_.clear();
+    pending_dropped_ = 0;
+}
+
+void InputBridge::logNativeMode()
+{
+    if (mode_ == Mode::Cdp) {
+        log::Info("input mode: cdp");
+    }
+    else if (native_) {
+        log::Info("input mode: native (Chrome_WidgetWin_1)");
+    }
+    else {
+        log::Info("input mode: cdp fallback (Chrome_WidgetWin_1 not found)");
+    }
+}
+
+bool InputBridge::ensureWidget()
+{
+    if (widget_ && IsWindow(widget_)) {
+        return true;
+    }
+    widget_ = nullptr;
+    struct Context
+    {
+        HWND found = nullptr;
+    } context;
+    EnumChildWindows(
+        hwnd_,
+        [](HWND child, LPARAM param) -> BOOL {
+            wchar_t cls[64] {};
+            if (GetClassNameW(child, cls, static_cast<int>(std::size(cls))) == 0) {
+                return TRUE;
+            }
+            if (wcscmp(cls, L"Chrome_WidgetWin_1") != 0) {
+                return TRUE;
+            }
+            reinterpret_cast<Context*>(param)->found = child;
+            return FALSE;
+        },
+        reinterpret_cast<LPARAM>(&context));
+    widget_ = context.found;
+    return widget_ != nullptr;
+}
+
+bool InputBridge::isWheelPointOnShell(LPARAM lparam) const
+{
+    // 视频/合成页在窗口被遮挡时会让 Chromium 丢弃原生滚轮；只有滚轮屏幕坐标
+    // 确实落在本壳体的可见区域时才走原生，否则交给 CDP。
+    if (IsIconic(hwnd_) || !IsWindowVisible(hwnd_)) {
+        return false;
+    }
+    const POINT point { GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };
+    const HWND hit = WindowFromPoint(point);
+    if (!hit) {
+        return false;
+    }
+    const HWND hit_root = GetAncestor(hit, GA_ROOT);
+    if (hit_root == hwnd_) {
+        return true;
+    }
+    // 视频合成页的 WindowFromPoint 可能返回 WebView2 的顶层 Chrome 窗口；
+    // 无法确认壳体可见时交给 CDP，避免原生消息被 Chromium 静默丢弃。
+    return false;
+}
+
+void InputBridge::updateModifiers(unsigned vk, bool down)
+{
+    if (const int bit = modifierBit(vk); bit != 0) {
+        modifiers_ = down ? (modifiers_ | bit) : (modifiers_ & ~bit);
+    }
+}
+
+bool InputBridge::forwardNative(UINT msg, WPARAM wparam, LPARAM lparam)
+{
+    if (!ensureWidget()) {
+        native_ = false;
+        return false;
+    }
+
+    switch (msg) {
+    case WM_MOUSEMOVE:
+    case WM_LBUTTONDOWN:
+    case WM_LBUTTONUP:
+    case WM_RBUTTONDOWN:
+    case WM_RBUTTONUP:
+    case WM_MBUTTONDOWN:
+    case WM_MBUTTONUP:
+    case WM_XBUTTONDOWN:
+    case WM_XBUTTONUP: {
+        POINT point { GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };
+        MapWindowPoints(hwnd_, widget_, &point, 1);
+        lparam = MAKELPARAM(point.x, point.y);
+        break;
+    }
+    case WM_MOUSEWHEEL:
+    case WM_MOUSEHWHEEL:
+        // WM_MOUSEWHEEL/WM_MOUSEHWHEEL 的 lParam 始终是屏幕坐标，Chromium 也按屏幕坐标命中；
+        // 转成客户区坐标会让滚轮落到错误位置或被丢弃。保持原 lParam 直接转交。
+        break;
+    case WM_KEYDOWN:
+    case WM_KEYUP:
+    case WM_SYSKEYDOWN:
+    case WM_SYSKEYUP:
+        updateModifiers(static_cast<unsigned>(wparam), msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN);
+        break;
+    default:
+        break;
+    }
+
+    if (!PostMessageW(widget_, msg, wparam, lparam)) {
+        log::Warn("native input forward failed: msg=0x{:04x}", msg);
+        native_ = false;
+        return false;
+    }
+    return true;
 }
 
 std::optional<LRESULT> InputBridge::HandleMessage(UINT msg, WPARAM wparam, LPARAM lparam)
 {
+    const auto try_native = [&](UINT message) {
+        if (mode_ == Mode::Cdp) {
+            return false;
+        }
+        if (!native_ && !ensureWidget()) {
+            return false;
+        }
+        if (!forwardNative(message, wparam, lparam)) {
+            return false;
+        }
+        native_ = true;
+        return true;
+    };
+
     switch (msg) {
+    case WM_ACTIVATE:
+        // 只处理 Run 中截获的投递激活；WndProc 里的真实激活不会走到这里
+        try_native(msg);
+        return 0;
+
     case WM_MOUSEMOVE:
+        if (try_native(msg)) {
+            return 0;
+        }
         // 控制器投递的移动总带着按键标志；不带的是偶尔落到顶层窗口上的真实鼠标移动
         if (wparam & (MK_LBUTTON | MK_RBUTTON | MK_MBUTTON | MK_XBUTTON1 | MK_XBUTTON2)) {
             onMouseMove(lparam);
         }
         return 0;
 
+    case kLookMessage:
+        dispatchLook(static_cast<int16_t>(LOWORD(wparam)), static_cast<int16_t>(LOWORD(lparam)));
+        return 0;
+
     case WM_TIMER:
-        if (wparam != kWatchdogTimer) {
+        if (wparam != watchdog_timer_) {
             return std::nullopt;
         }
         onWatchdog();
@@ -155,33 +323,74 @@ std::optional<LRESULT> InputBridge::HandleMessage(UINT msg, WPARAM wparam, LPARA
 
     case WM_LBUTTONDOWN:
     case WM_LBUTTONUP:
+        if (try_native(msg)) {
+            return 0;
+        }
         onMouseButton(kButtonLeft, msg == WM_LBUTTONDOWN, lparam);
         return 0;
     case WM_RBUTTONDOWN:
     case WM_RBUTTONUP:
+        if (try_native(msg)) {
+            return 0;
+        }
         onMouseButton(kButtonRight, msg == WM_RBUTTONDOWN, lparam);
         return 0;
     case WM_MBUTTONDOWN:
     case WM_MBUTTONUP:
+        if (try_native(msg)) {
+            return 0;
+        }
         onMouseButton(kButtonMiddle, msg == WM_MBUTTONDOWN, lparam);
         return 0;
     case WM_XBUTTONDOWN:
     case WM_XBUTTONUP:
+        if (try_native(msg)) {
+            return TRUE;
+        }
         onMouseButton(GET_XBUTTON_WPARAM(wparam) == XBUTTON1 ? kButtonBack : kButtonForward, msg == WM_XBUTTONDOWN, lparam);
         return TRUE;
 
-    case WM_MOUSEWHEEL:
+    case WM_MOUSEWHEEL: {
+        const bool native_allowed = mode_ == Mode::Native || (mode_ == Mode::Auto && isWheelPointOnShell(lparam));
+        if (native_allowed && try_native(msg)) {
+            return 0;
+        }
+        if (mode_ == Mode::Auto && !native_allowed) {
+            logWheelFallback();
+        }
         onMouseWheel(false, wparam, lparam);
         return 0;
-    case WM_MOUSEHWHEEL:
+    }
+    case WM_MOUSEHWHEEL: {
+        const bool native_allowed = mode_ == Mode::Native || (mode_ == Mode::Auto && isWheelPointOnShell(lparam));
+        if (native_allowed && try_native(msg)) {
+            return 0;
+        }
+        if (mode_ == Mode::Auto && !native_allowed) {
+            logWheelFallback();
+        }
         onMouseWheel(true, wparam, lparam);
         return 0;
+    }
 
     case WM_KEYDOWN:
     case WM_KEYUP:
+        if (try_native(msg)) {
+            return 0;
+        }
         onKey(msg == WM_KEYDOWN, wparam, lparam);
         return 0;
+    case WM_SYSKEYDOWN:
+    case WM_SYSKEYUP:
+        if (try_native(msg)) {
+            return 0;
+        }
+        return std::nullopt;
     case WM_CHAR:
+        // 控制器 input_text 投递的 WM_CHAR lParam 为 0；TranslateMessage 产生的重复字符不转交
+        if (lparam == 0 && try_native(msg)) {
+            return 0;
+        }
         onChar(wparam, lparam);
         return 0;
 
@@ -218,7 +427,9 @@ void InputBridge::onMouseButton(int raw_button, bool down, LPARAM lparam)
         buttons_ &= ~button;
     }
 
-    log::Info("mouse {} {} ({}, {})", buttonName(button), down ? "down" : "up", pointer_.x, pointer_.y);
+    if (auto suffix = inputLogSuffix()) {
+        log::Info("mouse {} {} ({}, {}){}", buttonName(button), down ? "down" : "up", pointer_.x, pointer_.y, *suffix);
+    }
     dispatchMouse(down ? "mousePressed" : "mouseReleased", buttonName(button), 1);
 }
 
@@ -227,6 +438,52 @@ void InputBridge::onMouseMove(LPARAM lparam)
     pointer_ = { GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };
     // button 取按住的第一个键，即最低位
     dispatchMouse("mouseMoved", buttonName(buttons_ & -buttons_), 0);
+}
+
+// 只在页面里产生一次带位移的 mousemove，再以零位移回位；不移动系统光标，也不改窗口或焦点。
+// 4 条命令作为同一个 group 整组入队：队列溢出时整组丢弃，不会留下「已位移未回零」的半组。
+void InputBridge::dispatchLook(int dx, int dy)
+{
+    ++look_group_;
+    pushCommands(LookCommands(dx, dy, modifiers_, look_group_), true);
+}
+
+std::vector<InputBridge::Command> InputBridge::LookCommands(int dx, int dy, int modifiers, uint64_t group)
+{
+    // 协议约定（README「与 MaaFramework 的约定」）：单条 |dx|<=640 / |dy|<=360，
+    // 更大的转向由发送方拆成多条消息。这里只把锚点钳到视口内，既不放大位移，
+    // 也不合并连续位移 —— 合并会丢掉旋转量。
+    const int x = std::clamp(kLookAnchorX + dx, 0, kViewportW - 1);
+    const int y = std::clamp(kLookAnchorY + dy, 0, kViewportH - 1);
+    const auto make_move = [modifiers](int mx, int my) {
+        return std::format(
+            R"({{"type":"mouseMoved","x":{},"y":{},"button":"none","buttons":0,"clickCount":0,"modifiers":{}}})",
+            mx,
+            my,
+            modifiers);
+    };
+    std::vector<Command> commands;
+    commands.reserve(kLookGroupSize);
+    commands.push_back(Command {
+        .method = "Runtime.evaluate",
+        .params = std::format(
+            R"js({{"expression":"window.__maaShellLook&&window.__maaShellLook({},{})"}})js",
+            x,
+            y),
+        .group = group,
+    });
+    commands.push_back(Command { .method = "Input.dispatchMouseEvent", .params = make_move(x, y), .group = group });
+    commands.push_back(Command {
+        .method = "Runtime.evaluate",
+        .params = R"js({"expression":"window.__maaShellZeroNext&&window.__maaShellZeroNext()"})js",
+        .group = group,
+    });
+    commands.push_back(Command {
+        .method = "Input.dispatchMouseEvent",
+        .params = make_move(kLookAnchorX, kLookAnchorY),
+        .group = group,
+    });
+    return commands;
 }
 
 void InputBridge::onMouseWheel(bool horizontal, WPARAM wparam, LPARAM lparam)
@@ -239,7 +496,9 @@ void InputBridge::onMouseWheel(bool horizontal, WPARAM wparam, LPARAM lparam)
 
     // 滚轮正值向上，CDP 的 deltaY 正值向下；水平方向一致
     const int delta = GET_WHEEL_DELTA_WPARAM(wparam);
-    log::Info("wheel horizontal={} delta={} ({}, {})", horizontal, delta, pointer_.x, pointer_.y);
+    if (auto suffix = inputLogSuffix()) {
+        log::Info("wheel horizontal={} delta={} ({}, {}){}", horizontal, delta, pointer_.x, pointer_.y, *suffix);
+    }
     dispatchMouse("mouseWheel", "none", 0, horizontal ? delta : 0, horizontal ? 0 : -delta);
 }
 
@@ -278,10 +537,13 @@ void InputBridge::onKey(bool down, WPARAM wparam, LPARAM lparam)
         jsonEscape(info->code),
         jsonEscape(key),
         info->location,
+        // TODO(#6841): location == 3 应改为 KeyLocation::Numpad 枚举比较，枚举由 #6841 的 KeyMap 补丁引入
         info->location == 3 ? R"(,"isKeypad":true)" : "",
         text_fields);
 
-    log::Info("key vk={} {} {}", vk, down ? "down" : "up", info->code);
+    if (auto suffix = inputLogSuffix()) {
+        log::Info("key vk={} {} {}{}", vk, down ? "down" : "up", info->code, *suffix);
+    }
     // 页面策略会在 keydown 里补发 mouseenter，SDK 可能随之申请指针锁定，先记为控制器输入
     if (down) {
         evaluate("window.__maaShellExpect&&window.__maaShellExpect()");
@@ -339,16 +601,20 @@ void InputBridge::dispatchMouse(std::string_view type, std::string_view button, 
 
     // 拖动时控制器每 10ms 投递一次移动，渲染进程按帧确认，命令会越积越多；还没发出的移动只保留最新的
     const bool move = type == "mouseMoved";
-    if (move && queue_.size() >= 2 && queue_.back().move && queue_[queue_.size() - 2].move) {
+    if (move && queue_.size() >= kMoveBatch && queue_.back().move && queue_[queue_.size() - kMoveBatch].move) {
         queue_.pop_back();
         queue_.pop_back();
     }
 
     // 页面策略按坐标认出控制器的事件
     const std::string expect = std::format("window.__maaShellExpect&&window.__maaShellExpect({},{})", pointer_.x, pointer_.y);
-    queue_.push_back(Command { .method = "Runtime.evaluate", .params = std::format(R"({{"expression":"{}"}})", jsonEscape(expect)), .move = move });
-    queue_.push_back(Command { .method = "Input.dispatchMouseEvent", .params = std::move(params), .move = move });
-    pump();
+    std::vector<Command> commands;
+    commands.reserve(kMoveBatch);
+    commands.push_back(
+        Command { .method = "Runtime.evaluate", .params = std::format(R"({{"expression":"{}"}})", jsonEscape(expect)), .move = move });
+    commands.push_back(Command { .method = "Input.dispatchMouseEvent", .params = std::move(params), .move = move });
+    // 登记坐标与投递事件是成对的，整组入队/整组放弃，不会只留下其中一条
+    pushCommands(std::move(commands), true);
 }
 
 void InputBridge::evaluate(std::string_view expression)
@@ -358,8 +624,83 @@ void InputBridge::evaluate(std::string_view expression)
 
 void InputBridge::enqueue(std::string method, std::string params)
 {
-    queue_.push_back(Command { .method = std::move(method), .params = std::move(params) });
+    std::vector<Command> commands;
+    commands.push_back(Command { .method = std::move(method), .params = std::move(params) });
+    // 非 look 命令是控制器事件的载体，超限时不丢弃（顺序也不变），只在有空间时先裁掉旧的 look 组
+    pushCommands(std::move(commands), false);
+}
+
+void InputBridge::pushCommands(std::vector<Command> commands, bool atomic_group)
+{
+    const size_t count = commands.size();
+    if (count == 0) {
+        return;
+    }
+
+    size_t dropped = 0;
+    if (queue_.size() + count > kMaxQueue) {
+        const size_t room = count < kMaxQueue ? kMaxQueue - count : 0;
+        dropped = TrimQueue(queue_, room);
+    }
+    if (atomic_group && queue_.size() + count > kMaxQueue) {
+        // 腾不出整组空间就整组放弃，绝不拆组
+        pending_dropped_ += dropped + count;
+        reportOverflow();
+        return;
+    }
+
+    for (auto& command : commands) {
+        queue_.push_back(std::move(command));
+    }
+    pending_dropped_ += dropped;
+    reportOverflow();
     pump();
+}
+
+size_t InputBridge::TrimQueue(std::deque<Command>& queue, size_t limit)
+{
+    size_t dropped = 0;
+    while (queue.size() > limit) {
+        // 找最旧的完整 look 组：同一 group 的连续命令，长度等于一次 look 的命令数。
+        // 组被 pump 取走前几条时只剩残段，长度不等，跳过它继续往后找。
+        size_t begin = 0;
+        size_t length = 0;
+        for (size_t index = 0; index < queue.size();) {
+            const uint64_t group = queue[index].group;
+            size_t end = index + 1;
+            while (end < queue.size() && queue[end].group == group) {
+                ++end;
+            }
+            if (group != 0 && end - index == kLookGroupSize) {
+                begin = index;
+                length = end - index;
+                break;
+            }
+            index = end;
+        }
+        if (length == 0) {
+            break;
+        }
+        queue.erase(queue.begin() + static_cast<std::ptrdiff_t>(begin), queue.begin() + static_cast<std::ptrdiff_t>(begin + length));
+        dropped += length;
+    }
+    return dropped;
+}
+
+void InputBridge::reportOverflow()
+{
+    // 同一轮溢出只报一条 Warn，附带这一轮累计丢弃的条数；队列重新有余量时才算一轮结束
+    if (pending_dropped_ == 0 || queue_.size() >= kMaxQueue) {
+        return;
+    }
+    log::Warn("look queue overflow (cap {}): dropped {} CDP commands", kMaxQueue, pending_dropped_);
+    pending_dropped_ = 0;
+}
+
+UINT_PTR InputBridge::ArmWatchdog(HWND hwnd, uint64_t generation)
+{
+    // 独立的 timer id：上一条命令已投递的 WM_TIMER 不会命中下一条
+    return SetTimer(hwnd, static_cast<UINT_PTR>(generation), kCommandTimeoutMs, nullptr);
 }
 
 void InputBridge::pump()
@@ -379,8 +720,20 @@ void InputBridge::pump()
         const std::wstring method = Utf8ToWide(command.method);
         const std::wstring params = Utf8ToWide(command.params);
         const uint64_t generation = ++generation_;
+        if (watchdog_timer_ != 0) {
+            KillTimer(hwnd_, watchdog_timer_);
+        }
+        watchdog_timer_ = ArmWatchdog(hwnd_, generation);
+        // 看门狗起不来时（SetTimer 返回 0）只能记一次错误并降级为“无超时保护”，
+        // 但 busy_ 必须保持串行屏障：CDP 命令有严格先后（登记坐标先于派发事件），
+        // 去掉屏障会让后续命令并发投递、破坏页面策略的坐标匹配。
         busy_ = true;
-        SetTimer(hwnd_, kWatchdogTimer, kCommandTimeoutMs, nullptr);
+        if (watchdog_timer_ == 0 && !watchdog_error_reported_) {
+            watchdog_error_reported_ = true;
+            log::Error(
+                "cannot create watchdog timer (error {}): CDP commands run without timeout guard",
+                GetLastError());
+        }
         const HRESULT hr = webview_->CallDevToolsProtocolMethod(
             method.c_str(),
             params.c_str(),
@@ -393,14 +746,17 @@ void InputBridge::pump()
                 }
                 busy_ = false;
                 pump();
-                if (!busy_) {
-                    KillTimer(hwnd_, kWatchdogTimer);
+                if (!busy_ && watchdog_timer_ != 0) {
+                    KillTimer(hwnd_, watchdog_timer_);
+                    watchdog_timer_ = 0;
                 }
                 return S_OK;
             }).Get());
 
         if (FAILED(hr)) {
             log::Error("CDP {} dispatch failed: 0x{:08x}", command.method, static_cast<unsigned>(hr));
+            KillTimer(hwnd_, watchdog_timer_);
+            watchdog_timer_ = 0;
             busy_ = false;
         }
     }
@@ -408,7 +764,8 @@ void InputBridge::pump()
 
 void InputBridge::onWatchdog()
 {
-    KillTimer(hwnd_, kWatchdogTimer);
+    KillTimer(hwnd_, watchdog_timer_);
+    watchdog_timer_ = 0;
     if (!busy_) {
         return;
     }
@@ -416,6 +773,31 @@ void InputBridge::onWatchdog()
     ++generation_;
     busy_ = false;
     pump();
+}
+
+std::optional<std::string> InputBridge::inputLogSuffix()
+{
+    const ULONGLONG now = GetTickCount64();
+    if (input_log_tick_ != 0 && now - input_log_tick_ < kInputLogIntervalMs) {
+        ++input_log_suppressed_;
+        return std::nullopt;
+    }
+    input_log_tick_ = now != 0 ? now : 1;
+    if (input_log_suppressed_ == 0) {
+        return std::string();
+    }
+    std::string suffix = std::format(" (+{} suppressed)", input_log_suppressed_);
+    input_log_suppressed_ = 0;
+    return suffix;
+}
+
+void InputBridge::logWheelFallback()
+{
+    if (wheel_fallback_reported_) {
+        return;
+    }
+    wheel_fallback_reported_ = true;
+    log::Info("native wheel fallback: point not over shell (logged once per session)");
 }
 
 } // namespace cloudshell

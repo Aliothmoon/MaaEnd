@@ -17,22 +17,35 @@
     const expected = [];
     let foreground = true;
     let lastAutomatedAt = -Infinity;
-    let lastPhysicalPressAt = -Infinity;
+    let zeroMove = null;
 
     window.__maaShellExpect = (x, y) => {
         lastAutomatedAt = performance.now();
         if (x === undefined) return;
-        expected.push({x, y, time: lastAutomatedAt});
+        expected.push({x, y, time: lastAutomatedAt, look: false});
         if (expected.length > 64) expected.shift();
+    };
+    // 镜头位移：这一拍要的是一次带 movementX 的移动，不能按“自动化定位”清零。
+    // 同一次位移会派发 pointerrawupdate/pointermove/mousemove 等多个事件，
+    // 条目在 TTL 内不消费，保证每种事件都能按同一坐标认出来。
+    window.__maaShellLook = (x, y) => {
+        lastAutomatedAt = performance.now();
+        expected.push({x, y, time: lastAutomatedAt, look: true});
+        if (expected.length > 64) expected.shift();
+    };
+    // 回位移动：零掉这组事件的位移。首个事件的位置在 500ms 内对同组事件生效。
+    window.__maaShellZeroNext = () => {
+        zeroMove = {x: null, y: null, until: performance.now() + 500};
     };
     window.__maaShellSetForeground = (value) => {
         foreground = !!value;
     };
 
-    // 按事件的创建时间判断过期：主线程被长任务占住时，处理时间会比派发晚得多
-    function isExpected(event) {
-        while (expected.length && event.timeStamp - expected[0].time > kExpectTtlMs) expected.shift();
-        return expected.some((item) => item.x === event.clientX && item.y === event.clientY);
+    // 按事件到达时间判过期：CDP 合成事件的时间戳与 performance.now 不同源。
+    function matchExpected(event) {
+        const now = performance.now();
+        while (expected.length && now - expected[0].time > kExpectTtlMs) expected.shift();
+        return expected.find((item) => item.x === event.clientX && item.y === event.clientY) || null;
     }
 
     // 点击始终放行：在后台窗口上点击属于用户的主动操作。SDK 在游戏元素上同时监听了鼠标与指针事件
@@ -46,22 +59,39 @@
             type,
             (event) => {
                 if (!event.isTrusted) return;
-                const automated = isExpected(event);
-                if (type === "mousedown") {
-                    if (!automated) lastPhysicalPressAt = performance.now();
-                    return;
-                }
-
-                if (!automated) {
-                    if (!foreground) {
-                        event.stopImmediatePropagation();
-                        if (event.cancelable) event.preventDefault();
+                const moveType = kMoveTypes.has(type);
+                if (zeroMove) {
+                    const now = performance.now();
+                    if (now > zeroMove.until) {
+                        zeroMove = null;
                     }
+                    else {
+                        if (zeroMove.x === null) {
+                            zeroMove.x = event.clientX;
+                            zeroMove.y = event.clientY;
+                        }
+                        if (event.clientX === zeroMove.x && event.clientY === zeroMove.y) {
+                            if (moveType) {
+                                Object.defineProperties(event, {movementX: {value: 0}, movementY: {value: 0}});
+                            }
+                            return;
+                        }
+                    }
+                }
+
+                const entry = matchExpected(event);
+                if (type === "mousedown") {
+                    // 原生转发与 CDP 合成事件都属于自动化输入，不再按物理点击放行指针锁定
                     return;
                 }
 
-                // SDK 丢弃位移为 0 的移动，控制器点击前的定位移动就不会带动镜头；拖动保留位移
-                if (kMoveTypes.has(type) && !event.buttons) {
+                if (entry && entry.look) {
+                    return;
+                }
+
+                // 无登记项的事件来自宿主转交的原生消息：放行，但不让无按键的定位移动带动镜头。
+                // 拖动（buttons 非零）保留位移；CDP 的 expected 移动同样按此处理。
+                if (moveType && !event.buttons) {
                     Object.defineProperties(event, {movementX: {value: 0}, movementY: {value: 0}});
                 }
             },
@@ -69,15 +99,11 @@
         );
     }
 
-    // 只有最近一次物理点击晚于最后一次控制器输入时才放行指针锁定。
-    // 必须保持可写：SDK 在严格模式下先执行 e.requestPointerLock = e.requestPointerLock，
-    // 只读属性会让赋值抛异常并被 SDK 吞掉，锁定根本发不出去
-    const requestPointerLock = Element.prototype.requestPointerLock;
-    Element.prototype.requestPointerLock = function (...args) {
-        if (lastAutomatedAt >= lastPhysicalPressAt) {
-            return Promise.reject(new DOMException("Pointer lock is not available after automated input.", "NotAllowedError"));
-        }
-        return requestPointerLock.apply(this, args);
+    // CloudShell 是自动化宿主：原生转发与 CDP 输入都无法与真实鼠标可靠区分，指针锁定一律拒绝，
+    // 避免锁定后真实鼠标在窗口外仍被游戏接收。必须保持可写：SDK 在严格模式下会先赋值，
+    // 只读属性会让赋值抛异常并被 SDK 吞掉。
+    Element.prototype.requestPointerLock = function () {
+        return Promise.reject(new DOMException("Pointer lock is disabled in the CloudShell automation host.", "NotAllowedError"));
     };
 
     // 鼠标离开视频或窗口失焦后 SDK 不再发送按键，直到视频收到 mouseenter；

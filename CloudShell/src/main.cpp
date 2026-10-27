@@ -63,6 +63,22 @@ bool parseOptions(cloudshell::ShellOptions& options)
         else if (arg == L"--debug-port" && has_value) {
             options.debug_port = _wtoi(argv[++i]);
         }
+        else if (arg == L"--input-mode" && has_value) {
+            const std::wstring value = argv[++i];
+            if (value == L"native") {
+                options.input_mode = cloudshell::InputBridge::Mode::Native;
+            }
+            else if (value == L"cdp") {
+                options.input_mode = cloudshell::InputBridge::Mode::Cdp;
+            }
+            else if (value == L"auto") {
+                options.input_mode = cloudshell::InputBridge::Mode::Auto;
+            }
+            else {
+                cloudshell::log::Error("invalid --input-mode (auto|native|cdp): {}", cloudshell::WideToUtf8(value));
+                ok = false;
+            }
+        }
         else if (arg == L"--inject" && has_value) {
             const std::filesystem::path path = argv[++i];
             if (auto script = readFile(path)) {

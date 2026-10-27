@@ -6,6 +6,7 @@ on:
       - "v2"
     paths:
       - ".github/workflows/check.yml"
+      - "CloudShell/**"
       - "assets/**"
       - "!assets/resource/model"
       - "tools/schema/**"
@@ -19,6 +20,7 @@ on:
       - "**"
     paths:
       - ".github/workflows/check.yml"
+      - "CloudShell/**"
       - "assets/**"
       - "!assets/resource/model"
       - "tools/schema/**"
@@ -56,3 +58,45 @@ jobs:
 
       - name: Validate JSON Schema
         run: uv run tools/validate_schema.py --resource-dirs assets/resource --exclude-dirs assets/resource/gamedata assets/resource/image assets/resource/model --task-dirs assets/tasks
+
+  cloudshell-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Run CloudShell policy tests
+        run: node --test CloudShell/scripts/cloud_policy.test.mjs
+
+  cloudshell-input:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          enable-cache: true
+          cache-python: true
+
+      - name: Setup WebView2 SDK
+        shell: bash
+        run: uv run -m tools.setup.dep_3rdparty --webview2
+
+      - name: Build CloudShell and run native input test
+        shell: powershell
+        working-directory: CloudShell
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $vsInstall = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if ([string]::IsNullOrWhiteSpace($vsInstall)) {
+            throw 'Visual Studio C++ toolchain was not found'
+          }
+          $vsDevShell = Join-Path $vsInstall 'Common7\Tools\Launch-VsDevShell.ps1'
+          & $vsDevShell -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
+          cmake --preset "NinjaMulti Win32" -DCLOUDSHELL_BUILD_TESTS=ON
+          cmake --build --preset Release --target cloud-shell-input-bridge-test
+          cmake --build --preset Release --target cloud-shell
+          ctest --test-dir build -C RelWithDebInfo --output-on-failure
