@@ -6,6 +6,8 @@ if(NOT WIN32)
     message(FATAL_ERROR "CloudShell only supports Windows")
 endif()
 
+option(CLOUDSHELL_BUILD_TESTS "Build CloudShell tests" OFF)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
@@ -36,5 +38,21 @@ target_compile_options(cloud-shell PRIVATE /utf-8 /W4 /WX /permissive-)
 # RCDATA 引用的文件不在资源编译的依赖里
 set_property(SOURCE "${CMAKE_CURRENT_BINARY_DIR}/resources.rc" APPEND PROPERTY OBJECT_DEPENDS
     "${CLOUD_SHELL_SCRIPTS_DIR}/cloud_policy.js")
+
+if(CLOUDSHELL_BUILD_TESTS)
+    enable_testing()
+    add_executable(cloud-shell-input-bridge-test
+        tests/input_bridge_test.cpp
+        src/InputBridge.cpp
+        src/KeyMap.cpp
+        src/Log.cpp
+        src/Resources.cpp
+    )
+    target_include_directories(cloud-shell-input-bridge-test PRIVATE src)
+    target_link_libraries(cloud-shell-input-bridge-test PRIVATE WebView2::LoaderStatic)
+    target_compile_definitions(cloud-shell-input-bridge-test PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_compile_options(cloud-shell-input-bridge-test PRIVATE /utf-8 /W4 /WX /permissive-)
+    add_test(NAME cloud-shell-input-bridge COMMAND cloud-shell-input-bridge-test)
+endif()
 
 install(TARGETS cloud-shell RUNTIME DESTINATION .)
