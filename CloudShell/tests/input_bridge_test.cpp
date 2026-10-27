@@ -1,11 +1,17 @@
 // InputBridge 原生转交的窗口级集成测试。
 // 用隐藏的宿主窗口与 Chrome_WidgetWin_1 子窗口模拟 WebView2 的客户区，验证
 // WM_ACTIVATE、客户区坐标转换、滚轮屏幕坐标转换、键盘/字符转交，以及子窗口重建后的重新定位。
+// 另外用 LookCommands/TrimQueue/ArmWatchdog 这三个不依赖 WebView2 的函数覆盖 look 命令组、
+// 队列上限裁剪与看门狗启动失败（N-04）的纯逻辑。pump() 本体需要真实 ICoreWebView2，
+// 仍只能靠运行期验证。
 // 测试只投递窗口消息，不移动系统光标，也不改变前台窗口。
 
 #include <cstdio>
 #include <cstdlib>
+#include <deque>
 #include <iterator>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include <windows.h>
@@ -145,6 +151,150 @@ void checkMousePoint(const Recorded* record, int expected_x, int expected_y, con
     check(GET_X_LPARAM(record->lparam) == expected_x && GET_Y_LPARAM(record->lparam) == expected_y, what);
 }
 
+void appendLook(std::deque<cloudshell::InputBridge::Command>& queue, uint64_t group)
+{
+    for (auto& command : cloudshell::InputBridge::LookCommands(10, 10, 0, group)) {
+        queue.push_back(std::move(command));
+    }
+}
+
+// 队列里的每个 look 组都必须完整（一次 look 的命令数），组号单调递增
+bool lookGroupsIntact(const std::deque<cloudshell::InputBridge::Command>& queue, uint64_t oldest_group)
+{
+    bool intact = true;
+    uint64_t previous = oldest_group - 1;
+    for (size_t index = 0; index < queue.size();) {
+        const uint64_t group = queue[index].group;
+        size_t end = index + 1;
+        while (end < queue.size() && queue[end].group == group) {
+            ++end;
+        }
+        if (group != 0) {
+            constexpr size_t kLookCommands = 4;
+            intact = intact && end - index == kLookCommands && group > previous;
+            previous = group;
+        }
+        index = end;
+    }
+    return intact;
+}
+
+bool contains(const std::string& haystack, const char* needle)
+{
+    return haystack.find(needle) != std::string::npos;
+}
+
+void testLookGroup()
+{
+    const auto commands = cloudshell::InputBridge::LookCommands(120, -80, 0, 7);
+    check(commands.size() == 4, "one look enqueues four CDP commands");
+    bool same_group = !commands.empty();
+    for (const auto& command : commands) {
+        same_group = same_group && command.group == 7;
+    }
+    check(same_group, "all look commands share one group id");
+    check(
+        commands.size() == 4 && commands[0].method == "Runtime.evaluate" && commands[1].method == "Input.dispatchMouseEvent"
+            && commands[2].method == "Runtime.evaluate" && commands[3].method == "Input.dispatchMouseEvent",
+        "look group order is register/move/zero-next/move-back");
+    check(
+        commands.size() == 4 && contains(commands[1].params, "\"x\":760") && contains(commands[1].params, "\"y\":280"),
+        "look displacement is applied relative to the viewport anchor");
+    check(
+        commands.size() == 4 && contains(commands[2].params, "__maaShellZeroNext"),
+        "look group resets the page-side zero-next marker");
+    check(
+        commands.size() == 4 && contains(commands[3].params, "\"x\":640") && contains(commands[3].params, "\"y\":360"),
+        "look group returns the virtual pointer to the anchor");
+
+    // 协议上限 ±640/±360：更大的转向由发送方拆条，壳侧只钳到视口内
+    const auto clamped = cloudshell::InputBridge::LookCommands(5000, -5000, 0, 8);
+    check(clamped.size() == 4 && contains(clamped[1].params, "\"x\":1279"), "look dx clamps to viewport width - 1");
+    check(clamped.size() == 4 && contains(clamped[1].params, "\"y\":0"), "look dy clamps to viewport top");
+    check(clamped.size() == 4 && contains(clamped[3].params, "\"x\":640"), "clamped look still returns to the anchor");
+}
+
+void testQueueTrim()
+{
+    // 10 组 look = 40 条，裁到上限 32：整组丢弃最旧的两组
+    std::deque<cloudshell::InputBridge::Command> queue;
+    for (uint64_t group = 1; group <= 10; ++group) {
+        appendLook(queue, group);
+    }
+    const size_t dropped = cloudshell::InputBridge::TrimQueue(queue, cloudshell::InputBridge::kMaxQueue);
+    check(queue.size() <= cloudshell::InputBridge::kMaxQueue, "look queue is trimmed to the hard cap");
+    check(dropped == 8, "two oldest look groups are dropped as a whole");
+    check(lookGroupsIntact(queue, 3), "remaining look groups stay complete and in order");
+    check(!queue.empty() && queue.back().group == 10, "newest look group is kept");
+
+    // 组被 pump 取走前两条后只剩残段：残段永远不能丢（否则页面停在已位移状态）
+    std::deque<cloudshell::InputBridge::Command> partial;
+    appendLook(partial, 1);
+    partial.pop_front();
+    partial.pop_front();
+    for (uint64_t group = 2; group <= 10; ++group) {
+        appendLook(partial, group);
+    }
+    const size_t partial_dropped = cloudshell::InputBridge::TrimQueue(partial, cloudshell::InputBridge::kMaxQueue);
+    check(!partial.empty() && partial.front().group == 1, "partially dispatched look group is never dropped");
+    check(partial_dropped == 8, "only complete look groups behind the partial head are dropped");
+    check(partial.size() <= cloudshell::InputBridge::kMaxQueue, "queue with a partial head group still fits the cap");
+
+    // 非 look 命令顺序不变，也不会被 look 组裁剪吃掉
+    std::deque<cloudshell::InputBridge::Command> mixed;
+    mixed.push_back(cloudshell::InputBridge::Command { .method = "Runtime.evaluate", .params = "first" });
+    for (uint64_t group = 1; group <= 6; ++group) {
+        appendLook(mixed, group);
+    }
+    mixed.push_back(cloudshell::InputBridge::Command { .method = "Runtime.evaluate", .params = "second" });
+    for (uint64_t group = 7; group <= 12; ++group) {
+        appendLook(mixed, group);
+    }
+    cloudshell::InputBridge::TrimQueue(mixed, cloudshell::InputBridge::kMaxQueue);
+    std::vector<std::string> non_look;
+    for (const auto& command : mixed) {
+        if (command.group == 0) {
+            non_look.push_back(command.params);
+        }
+    }
+    check(
+        non_look.size() == 2 && non_look[0] == "first" && non_look[1] == "second",
+        "non-look commands keep their order and are never dropped");
+    check(mixed.size() <= cloudshell::InputBridge::kMaxQueue, "mixed queue is trimmed to the cap");
+    check(lookGroupsIntact(mixed, 6), "trimmed mixed queue keeps complete look groups in order");
+
+    // 队列里全是非 look 命令时无组可丢：TrimQueue 不做任何事（调用方据此不丢弃控制器输入）
+    std::deque<cloudshell::InputBridge::Command> keys;
+    for (int index = 0; index < 40; ++index) {
+        keys.push_back(cloudshell::InputBridge::Command { .method = "Input.dispatchKeyEvent", .params = std::to_string(index) });
+    }
+    const size_t key_dropped = cloudshell::InputBridge::TrimQueue(keys, cloudshell::InputBridge::kMaxQueue);
+    check(key_dropped == 0 && keys.size() == 40, "trimming never drops non-look commands");
+}
+
+void testWatchdogArm(HWND host)
+{
+    const UINT_PTR timer = cloudshell::InputBridge::ArmWatchdog(host, 1);
+    check(timer != 0, "watchdog timer arms on a live window");
+    check(cloudshell::InputBridge::WatchdogGatesInput(timer), "armed watchdog keeps the busy barrier");
+    if (timer != 0) {
+        KillTimer(host, timer);
+    }
+
+    // 失效窗口上 SetTimer 返回 0（error 1400）：此时不能设置 busy 屏障，否则后续输入永久卡住
+    const HWND doomed = createHidden(host, kDecoyClass, 0, 0, 10, 10);
+    if (!doomed) {
+        check(false, "cannot create the window used for the watchdog failure case");
+        return;
+    }
+    DestroyWindow(doomed);
+    pumpMessages();
+    SetLastError(0);
+    const UINT_PTR failed = cloudshell::InputBridge::ArmWatchdog(doomed, 2);
+    check(failed == 0, "watchdog arming fails on an invalid window");
+    check(!cloudshell::InputBridge::WatchdogGatesInput(failed), "failed watchdog does not set the busy barrier");
+}
+
 } // namespace
 
 int main()
@@ -179,6 +329,11 @@ int main()
 
     WidgetLog log;
     g_widget_log = &log;
+
+    // 不依赖 WebView2 的纯逻辑：look 命令组、队列裁剪、看门狗定时器启动
+    testLookGroup();
+    testQueueTrim();
+    testWatchdogArm(host);
 
     // 干扰项排在前面的枚举顺序里，选择逻辑仍应命中 Chrome_WidgetWin_1。
     const HWND decoy = createHidden(host, kDecoyClass, 0, 0, 50, 50);
